@@ -1,5 +1,5 @@
 <script setup>
-import { computed, ref, watch } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import {
   AlertCircle,
   Bell,
@@ -33,6 +33,7 @@ const activeSection = ref('dashboard')
 const welcomeVisible = ref(true)
 const searchQuery = ref('')
 const statusFilter = ref('الكل')
+const apiOnline = ref(false)
 
 setTimeout(() => {
   welcomeVisible.value = false
@@ -122,6 +123,7 @@ const clientForm = ref({
 const propertyErrors = ref({})
 const clientErrors = ref({})
 const successMessage = ref('')
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8787/api'
 
 const iraqiPhonePattern = /^(075|077|078|079)[0-9]{8}$/
 const nationalIdPattern = /^[A-Za-z0-9]{12,}$/
@@ -136,6 +138,31 @@ const showSuccess = (message) => {
   window.setTimeout(() => {
     successMessage.value = ''
   }, 2600)
+}
+
+const apiRequest = async (path, options = {}) => {
+  const response = await fetch(`${API_BASE_URL}${path}`, {
+    headers: { 'Content-Type': 'application/json', ...(options.headers || {}) },
+    ...options,
+  })
+  const data = await response.json()
+  if (!response.ok) {
+    const error = new Error(data.message || 'API request failed')
+    error.errors = data.errors || {}
+    throw error
+  }
+  return data
+}
+
+const loadApiData = async () => {
+  try {
+    const [serverProperties, serverClients] = await Promise.all([apiRequest('/properties'), apiRequest('/clients')])
+    properties.value = serverProperties
+    clients.value = serverClients
+    apiOnline.value = true
+  } catch {
+    apiOnline.value = false
+  }
 }
 
 const validateProperty = () => {
@@ -156,22 +183,44 @@ const addProperty = () => {
   if (!validateProperty()) return
 
   const price = Number(String(propertyForm.value.price).replaceAll(',', ''))
-  properties.value.unshift({
+  const payload = {
     code: nextPropertyCode.value,
     type: propertyForm.value.type,
     mode: propertyForm.value.mode,
+    province: propertyForm.value.province,
     area: propertyForm.value.area,
+    space: propertyForm.value.space,
+    rooms: propertyForm.value.rooms,
     price: price.toLocaleString('en-US'),
     status: propertyForm.value.status,
     owner: propertyForm.value.owner,
+    negotiable: propertyForm.value.negotiable,
+  }
+
+  apiRequest('/properties', {
+    method: 'POST',
+    body: JSON.stringify(payload),
   })
+    .then((createdProperty) => {
+      properties.value.unshift(createdProperty)
+      apiOnline.value = true
+      showSuccess('تمت إضافة العقار وحفظه في API.')
+    })
+    .catch((error) => {
+      apiOnline.value = false
+      if (Object.keys(error.errors || {}).length > 0) {
+        propertyErrors.value = error.errors
+        return
+      }
+      properties.value.unshift(payload)
+      showSuccess('تمت إضافة العقار محلياً. شغّل API لحفظه في السيرفر.')
+    })
 
   propertyForm.value.area = ''
   propertyForm.value.space = ''
   propertyForm.value.rooms = ''
   propertyForm.value.price = ''
   propertyForm.value.owner = ''
-  showSuccess('تمت إضافة العقار إلى قائمة المراجعة.')
 }
 
 const validateClient = () => {
@@ -192,18 +241,37 @@ const validateClient = () => {
 const addClient = () => {
   if (!validateClient()) return
 
-  clients.value.unshift({
+  const payload = {
     name: clientForm.value.name,
     role: clientForm.value.role,
     phone: clientForm.value.phone,
+    nationalId: clientForm.value.nationalId,
     stage: clientForm.value.stage,
     source: clientForm.value.source,
+  }
+
+  apiRequest('/clients', {
+    method: 'POST',
+    body: JSON.stringify(payload),
   })
+    .then((createdClient) => {
+      clients.value.unshift(createdClient)
+      apiOnline.value = true
+      showSuccess('تمت إضافة العميل وحفظه في API.')
+    })
+    .catch((error) => {
+      apiOnline.value = false
+      if (Object.keys(error.errors || {}).length > 0) {
+        clientErrors.value = error.errors
+        return
+      }
+      clients.value.unshift(payload)
+      showSuccess('تمت إضافة العميل محلياً. شغّل API لحفظه في السيرفر.')
+    })
 
   clientForm.value.name = ''
   clientForm.value.phone = ''
   clientForm.value.nationalId = ''
-  showSuccess('تمت إضافة العميل إلى CRM.')
 }
 
 const contracts = [
@@ -323,6 +391,8 @@ const shellClasses = computed(() => ({
   'is-dark': darkMode.value,
   'is-collapsed': collapsed.value,
 }))
+
+onMounted(loadApiData)
 </script>
 
 <template>
@@ -372,6 +442,9 @@ const shellClasses = computed(() => ({
           <button class="icon-button" type="button" title="الإشعارات">
             <Bell :size="20" />
           </button>
+          <span class="api-status" :class="{ online: apiOnline }">
+            {{ apiOnline ? 'API متصل' : 'حفظ محلي' }}
+          </span>
           <button class="icon-button" type="button" :title="darkMode ? 'الثيم الفاتح' : 'الثيم الداكن'" @click="darkMode = !darkMode">
             <Sun v-if="darkMode" :size="20" />
             <Moon v-else :size="20" />

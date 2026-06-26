@@ -2,6 +2,8 @@
 
 هذا العقد يحدد شكل الـ API المتوقع من Laravel حتى تبقى واجهة Vue والـ Backend متفقين.
 
+يوجد تطبيق تطويري مؤقت لهذا العقد داخل `backend/server.js` يعمل بـ Node.js بدون حزم خارجية.
+
 ## Authentication
 
 `POST /api/auth/login`

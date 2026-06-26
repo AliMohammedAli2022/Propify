@@ -2,6 +2,8 @@
 
 الترشيح التقني: Laravel API + MySQL + Vue 3 PWA.
 
+إلى حين توفر PHP وComposer، يوجد Backend تطويري جاهز داخل `backend/` لتشغيل العقارات والعملاء والداشبورد بنفس عقد الـ API المتوقع من Laravel.
+
 ## المرحلة 1
 
 - إنشاء مشروع Laravel داخل `backend/` عند توفر PHP وComposer.
