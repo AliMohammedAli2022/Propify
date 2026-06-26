@@ -125,6 +125,10 @@ Validation:
 
 `POST /api/clients`
 
+`PUT /api/clients/{id}`
+
+`DELETE /api/clients/{id}`
+
 ```json
 {
   "name": "أحمد علي",

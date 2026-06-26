@@ -21,6 +21,8 @@ Route::get('/properties/{property:code}/media', [PropifyController::class, 'prop
 Route::post('/properties/{property:code}/media', [PropifyController::class, 'storePropertyMedia']);
 Route::get('/clients', [PropifyController::class, 'clients']);
 Route::post('/clients', [PropifyController::class, 'storeClient']);
+Route::put('/clients/{client}', [PropifyController::class, 'updateClient']);
+Route::delete('/clients/{client}', [PropifyController::class, 'deleteClient']);
 Route::get('/contracts', [PropifyController::class, 'contracts']);
 Route::post('/contracts', [PropifyController::class, 'storeContract']);
 Route::get('/installments', [PropifyController::class, 'installments']);

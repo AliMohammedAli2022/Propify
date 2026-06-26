@@ -657,6 +657,13 @@ th {
   gap: 6px;
 }
 
+.list-row .row-actions,
+td .row-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+}
+
 .danger-action {
   color: var(--danger);
 }

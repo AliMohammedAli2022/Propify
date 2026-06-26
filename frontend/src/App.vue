@@ -130,6 +130,7 @@ const clientForm = ref({
   source: 'الموقع',
   stage: 'عميل محتمل',
 })
+const editingClientId = ref('')
 
 const propertyErrors = ref({})
 const clientErrors = ref({})
@@ -543,15 +544,22 @@ const addClient = () => {
     stage: clientForm.value.stage,
     source: clientForm.value.source,
   }
+  const endpoint = editingClientId.value ? `/clients/${editingClientId.value}` : '/clients'
+  const method = editingClientId.value ? 'PUT' : 'POST'
 
-  apiRequest('/clients', {
-    method: 'POST',
+  apiRequest(endpoint, {
+    method,
     body: JSON.stringify(payload),
   })
     .then((createdClient) => {
-      clients.value.unshift(createdClient)
+      if (editingClientId.value) {
+        clients.value = clients.value.map((client) => (client.id === createdClient.id ? createdClient : client))
+      } else {
+        clients.value.unshift(createdClient)
+      }
       apiOnline.value = true
-      showSuccess('تمت إضافة العميل وحفظه في API.')
+      showSuccess(editingClientId.value ? 'تم تحديث بيانات العميل.' : 'تمت إضافة العميل وحفظه في API.')
+      resetClientForm()
     })
     .catch((error) => {
       apiOnline.value = false
@@ -562,10 +570,56 @@ const addClient = () => {
       clients.value.unshift(payload)
       showSuccess('تمت إضافة العميل محلياً. شغّل API لحفظه في السيرفر.')
     })
+}
 
+const resetClientForm = () => {
   clientForm.value.name = ''
   clientForm.value.phone = ''
   clientForm.value.nationalId = ''
+  clientForm.value.role = 'مشتري'
+  clientForm.value.source = 'الموقع'
+  clientForm.value.stage = 'عميل محتمل'
+  editingClientId.value = ''
+}
+
+const startEditClient = (client) => {
+  if (!client.id) {
+    showSuccess('هذا العميل محلي فقط، أعد تحميل API قبل تعديله.')
+    return
+  }
+
+  editingClientId.value = client.id
+  clientForm.value.name = client.name
+  clientForm.value.role = client.role
+  clientForm.value.phone = client.phone
+  clientForm.value.nationalId = client.nationalId
+  clientForm.value.source = client.source
+  clientForm.value.stage = client.stage
+  activeSection.value = 'clients'
+  showSuccess(`تم تحميل بيانات العميل ${client.name} للتعديل.`)
+}
+
+const deleteClient = (client) => {
+  if (!client.id) {
+    clients.value = clients.value.filter((item) => item.phone !== client.phone)
+    showSuccess(`تم حذف العميل المحلي ${client.name}.`)
+    return
+  }
+
+  if (!window.confirm(`هل تريد حذف العميل ${client.name}؟`)) return
+
+  apiRequest(`/clients/${client.id}`, { method: 'DELETE' })
+    .then(() => {
+      clients.value = clients.value.filter((item) => item.id !== client.id)
+      apiOnline.value = true
+      showSuccess(`تم حذف العميل ${client.name}.`)
+      return loadApiData()
+    })
+    .catch((error) => {
+      apiOnline.value = false
+      const message = error.errors?.client?.[0] || 'تعذر حذف العميل.'
+      showSuccess(message)
+    })
 }
 
 const voucherForm = ref({
@@ -1120,7 +1174,8 @@ onMounted(loadCurrentUser)
                 <option>مغلق</option>
               </select>
             </label>
-            <button class="submit-button" type="submit"><Plus :size="18" /> إضافة العميل</button>
+            <button class="submit-button" type="submit"><Plus :size="18" /> {{ editingClientId ? 'حفظ التعديل' : 'إضافة العميل' }}</button>
+            <button v-if="editingClientId" class="text-button ghost-button" type="button" @click="resetClientForm">إلغاء التعديل</button>
           </form>
         </article>
 
@@ -1292,7 +1347,11 @@ onMounted(loadCurrentUser)
                 <strong>{{ client.name }}</strong>
                 <span>{{ client.role }} · {{ client.source }}</span>
               </div>
-              <small>{{ client.stage }}</small>
+              <div class="row-actions">
+                <small>{{ client.stage }}</small>
+                <button class="mini-button" type="button" title="تعديل" @click="startEditClient(client)">ت</button>
+                <button class="mini-button danger-action" type="button" title="حذف" @click="deleteClient(client)">×</button>
+              </div>
             </div>
           </div>
         </article>

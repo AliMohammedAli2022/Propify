@@ -271,29 +271,45 @@ class PropifyController extends Controller
 
     public function storeClient(Request $request): JsonResponse
     {
-        $validator = Validator::make($request->all(), [
-            'name' => ['required', 'string'],
-            'role' => ['required', 'string'],
-            'phone' => ['required', 'regex:/^(075|077|078|079)[0-9]{8}$/'],
-            'nationalId' => ['required', 'regex:/^[A-Za-z0-9]{12,}$/'],
-            'stage' => ['nullable', 'string'],
-            'source' => ['nullable', 'string'],
-        ], $this->messages());
+        $validator = Validator::make($request->all(), $this->clientRules(), $this->messages());
 
         if ($validator->fails()) {
             return $this->json(['message' => 'Validation failed', 'errors' => $validator->errors()], 422);
         }
 
-        $client = Client::create([
-            'name' => $request->string('name'),
-            'role' => $request->string('role'),
-            'phone' => $request->string('phone'),
-            'national_id' => $request->string('nationalId'),
-            'stage' => $request->input('stage', 'عميل محتمل'),
-            'source' => $request->input('source', 'الموقع'),
-        ]);
+        $client = Client::create($this->clientData($request));
 
         return $this->json($this->clientResource($client), 201);
+    }
+
+    public function updateClient(Request $request, Client $client): JsonResponse
+    {
+        $validator = Validator::make($request->all(), $this->clientRules(), $this->messages());
+
+        if ($validator->fails()) {
+            return $this->json(['message' => 'Validation failed', 'errors' => $validator->errors()], 422);
+        }
+
+        $client->update($this->clientData($request));
+
+        return $this->json($this->clientResource($client->refresh()));
+    }
+
+    public function deleteClient(Client $client): JsonResponse
+    {
+        $hasContracts = Contract::where('client', $client->name)->exists();
+        $hasVouchers = Voucher::where('client', $client->name)->exists();
+
+        if ($hasContracts || $hasVouchers) {
+            return $this->json([
+                'message' => 'لا يمكن حذف عميل مرتبط بعقد أو سند.',
+                'errors' => ['client' => ['لا يمكن حذف عميل مرتبط بعقد أو سند.']],
+            ], 409);
+        }
+
+        $client->delete();
+
+        return $this->json(['ok' => true]);
     }
 
     public function contracts(Request $request): JsonResponse
@@ -621,6 +637,30 @@ class PropifyController extends Controller
         ];
     }
 
+    private function clientRules(): array
+    {
+        return [
+            'name' => ['required', 'string'],
+            'role' => ['required', 'string'],
+            'phone' => ['required', 'regex:/^(075|077|078|079)[0-9]{8}$/'],
+            'nationalId' => ['required', 'regex:/^[A-Za-z0-9]{12,}$/'],
+            'stage' => ['nullable', 'string'],
+            'source' => ['nullable', 'string'],
+        ];
+    }
+
+    private function clientData(Request $request): array
+    {
+        return [
+            'name' => $request->string('name'),
+            'role' => $request->string('role'),
+            'phone' => $request->string('phone'),
+            'national_id' => $request->string('nationalId'),
+            'stage' => $request->input('stage', 'عميل محتمل'),
+            'source' => $request->input('source', 'الموقع'),
+        ];
+    }
+
     private function applyDateRange($query, Request $request, string $column): void
     {
         if ($request->filled('from')) {
@@ -735,6 +775,7 @@ class PropifyController extends Controller
     private function clientResource(Client $client): array
     {
         return [
+            'id' => $client->id,
             'name' => $client->name,
             'role' => $client->role,
             'phone' => $client->phone,
