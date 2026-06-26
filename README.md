@@ -69,9 +69,13 @@ cd frontend
 npm run build
 ```
 
+## النشر
+
+راجع [Deployment Guide](docs/deployment.md) لإعداد Laravel API والواجهة على الاستضافة، بما يشمل `.env`، CORS، migrations، `storage:link`، وبناء Vue للإنتاج.
+
 ## ملاحظات
 
-لم يتم توليد مشروع Laravel محلياً لأن PHP وComposer غير مثبتين في البيئة الحالية. عند توفرهما، اتبع [Backend Blueprint](docs/backend-blueprint.md)، وراجع [Database Schema](docs/database-schema.sql)، و[API Contract](docs/api-contract.md) لإنشاء API وربطه بالواجهة.
+مشروع Laravel الفعلي موجود داخل `laravel-api/`، ونسخة Node داخل `backend/` باقية كمرجع احتياطي فقط.
 ## Property Media
 
 - Property records can now store uploaded images and documents through the Laravel API.
