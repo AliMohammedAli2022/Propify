@@ -346,6 +346,28 @@ class PropifyController extends Controller
         return $this->json($created, 201);
     }
 
+    public function deletePropertyMedia(Request $request, Property $property, PropertyMedia $media): JsonResponse
+    {
+        if ($guard = $this->guard($request, 'properties.update')) {
+            return $guard;
+        }
+
+        if ($media->property_code !== $property->code) {
+            return $this->json(['message' => 'Media file does not belong to this property.'], 404);
+        }
+
+        Storage::disk('public')->delete($media->path);
+        $mediaName = $media->original_name;
+        $media->delete();
+
+        $this->logActivity($request, 'delete', 'property_media', (string) $media->id, "حذف ملف من العقار {$property->code}", [
+            'property_code' => $property->code,
+            'file_name' => $mediaName,
+        ]);
+
+        return $this->json(['ok' => true]);
+    }
+
     public function clients(Request $request): JsonResponse
     {
         if ($guard = $this->guard($request, 'clients.manage')) {

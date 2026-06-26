@@ -534,7 +534,7 @@ h2 {
   margin-top: 14px;
 }
 
-.media-list a,
+.media-item,
 .empty-note {
   min-height: 42px;
   display: flex;
@@ -546,6 +546,22 @@ h2 {
   color: var(--text);
   background: var(--surface-2);
   text-decoration: none;
+}
+
+.media-item a {
+  min-width: 0;
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text);
+  text-decoration: none;
+}
+
+.media-item span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .media-list small,

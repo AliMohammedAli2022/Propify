@@ -462,6 +462,22 @@ const uploadPropertyMedia = () => {
     })
 }
 
+const deletePropertyMedia = (media) => {
+  if (!mediaForm.value.propertyCode || !window.confirm(`هل تريد حذف الملف ${media.name}؟`)) return
+
+  apiRequest(`/properties/${mediaForm.value.propertyCode}/media/${media.id}`, { method: 'DELETE' })
+    .then(() => {
+      propertyMedia.value = propertyMedia.value.filter((item) => item.id !== media.id)
+      apiOnline.value = true
+      showSuccess(`تم حذف الملف ${media.name}.`)
+      return loadApiData()
+    })
+    .catch(() => {
+      apiOnline.value = false
+      showSuccess('تعذر حذف ملف العقار.')
+    })
+}
+
 const saveSettings = () => {
   settingsErrors.value = {}
 
@@ -2159,11 +2175,14 @@ onMounted(loadCurrentUser)
             <button class="submit-button" type="submit"><Plus :size="18" /> رفع الملفات</button>
           </form>
           <div class="media-list">
-            <a v-for="media in propertyMedia" :key="media.id" :href="media.url" target="_blank" rel="noreferrer">
-              <FileText :size="17" />
-              <span>{{ media.name }}</span>
-              <small>{{ media.kind === 'image' ? 'صورة' : 'مستند' }}</small>
-            </a>
+            <div v-for="media in propertyMedia" :key="media.id" class="media-item">
+              <a :href="media.url" target="_blank" rel="noreferrer">
+                <FileText :size="17" />
+                <span>{{ media.name }}</span>
+                <small>{{ media.kind === 'image' ? 'صورة' : 'مستند' }}</small>
+              </a>
+              <button class="mini-button danger-action" type="button" title="حذف الملف" @click="deletePropertyMedia(media)">×</button>
+            </div>
             <p v-if="mediaForm.propertyCode && propertyMedia.length === 0" class="empty-note">لا توجد ملفات مرفوعة لهذا العقار بعد.</p>
           </div>
         </article>
