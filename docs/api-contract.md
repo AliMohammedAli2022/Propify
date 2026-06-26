@@ -295,6 +295,12 @@ Response item:
 }
 ```
 
+## Backup
+
+`GET /api/backup/export`
+
+Requires `settings.update`. Returns a downloadable JSON backup containing metadata, settings, users without password hashes, clients, properties, contracts, installments, vouchers, ledger entries, media records, and recent activity logs.
+
 ## Settings
 
 `GET /api/settings`

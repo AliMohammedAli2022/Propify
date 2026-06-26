@@ -844,6 +844,41 @@ class PropifyController extends Controller
         );
     }
 
+    public function exportBackup(Request $request)
+    {
+        if ($guard = $this->guard($request, 'settings.update')) {
+            return $guard;
+        }
+
+        $createdAt = now();
+        $payload = [
+            'meta' => [
+                'app' => 'Propify',
+                'version' => 1,
+                'createdAt' => $createdAt->toDateTimeString(),
+                'database' => config('database.connections.mysql.database'),
+            ],
+            'settings' => $this->settingsResource($this->appSettings()),
+            'users' => User::query()->latest()->get()->map(fn (User $user) => $this->userResource($user))->values(),
+            'clients' => Client::query()->latest()->get()->map(fn (Client $client) => $this->clientResource($client))->values(),
+            'properties' => Property::query()->latest()->get()->map(fn (Property $property) => $this->propertyResource($property))->values(),
+            'contracts' => Contract::query()->latest()->get()->map(fn (Contract $contract) => $this->contractResource($contract))->values(),
+            'installments' => Installment::query()->orderBy('due_date')->get()->map(fn (Installment $installment) => $this->installmentResource($installment))->values(),
+            'vouchers' => Voucher::query()->latest()->get()->map(fn (Voucher $voucher) => $this->voucherResource($voucher))->values(),
+            'ledger' => LedgerEntry::query()->latest()->get()->map(fn (LedgerEntry $entry) => $this->ledgerResource($entry))->values(),
+            'media' => PropertyMedia::query()->latest()->get()->map(fn (PropertyMedia $media) => $this->mediaResource($media))->values(),
+            'activityLogs' => ActivityLog::query()->latest()->limit(500)->get()->map(fn (ActivityLog $activity) => $this->activityResource($activity))->values(),
+        ];
+
+        $this->logActivity($request, 'export', 'backup', $createdAt->format('Ymd-His'), 'تصدير نسخة احتياطية للنظام');
+
+        return response()->json($payload, 200, [
+            'Content-Type' => 'application/json; charset=UTF-8',
+            'Content-Disposition' => 'attachment; filename="propify-backup-'.$createdAt->format('Ymd-His').'.json"',
+            'Access-Control-Allow-Origin' => '*',
+        ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_PRETTY_PRINT);
+    }
+
     public function settings(Request $request): JsonResponse
     {
         if ($guard = $this->guard($request)) {

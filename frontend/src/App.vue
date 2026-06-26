@@ -1134,8 +1134,8 @@ const filteredProperties = computed(() => {
   })
 })
 
-const downloadFile = (filename, content, type = 'text/csv;charset=utf-8') => {
-  const blob = new Blob(['\ufeff', content], { type })
+const downloadFile = (filename, content, type = 'text/csv;charset=utf-8', withBom = true) => {
+  const blob = new Blob([withBom ? '\ufeff' : '', content], { type })
   const url = URL.createObjectURL(blob)
   const link = document.createElement('a')
   link.href = url
@@ -1202,6 +1202,26 @@ const downloadReport = async (report, filename) => {
   } catch {
     apiOnline.value = false
     showSuccess('تعذر تنزيل التقرير من API.')
+  }
+}
+
+const downloadBackup = async () => {
+  try {
+    const response = await fetch(`${API_BASE_URL}/backup/export`, {
+      headers: {
+        ...(authToken.value ? { Authorization: `Bearer ${authToken.value}` } : {}),
+      },
+    })
+    if (!response.ok) throw new Error('Backup export failed')
+
+    const content = await response.text()
+    const filename = `propify-backup-${new Date().toISOString().slice(0, 19).replaceAll(':', '-')}.json`
+    downloadFile(filename, content, 'application/json;charset=utf-8', false)
+    apiOnline.value = true
+    showSuccess('تم تنزيل النسخة الاحتياطية.')
+  } catch {
+    apiOnline.value = false
+    showSuccess('تعذر تنزيل النسخة الاحتياطية من API.')
   }
 }
 
@@ -2038,6 +2058,15 @@ onMounted(loadCurrentUser)
                 <span>{{ API_BASE_URL }}</span>
               </div>
               <small>{{ apiOnline ? 'متصل' : 'غير متصل' }}</small>
+            </div>
+            <div class="list-row">
+              <div>
+                <strong>النسخ الاحتياطي</strong>
+                <span>تصدير ملف JSON يحتوي بيانات النظام التشغيلية.</span>
+              </div>
+              <button class="mini-button" type="button" title="تنزيل نسخة احتياطية" @click="downloadBackup">
+                <Download :size="17" />
+              </button>
             </div>
             <div class="list-row">
               <div>
