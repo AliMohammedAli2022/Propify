@@ -1029,6 +1029,24 @@ const exportProperties = () => {
   downloadFile('propify-properties.csv', csv)
 }
 
+const downloadReport = async (report, filename) => {
+  try {
+    const response = await fetch(`${API_BASE_URL}/reports/${report}?export=csv`, {
+      headers: {
+        ...(authToken.value ? { Authorization: `Bearer ${authToken.value}` } : {}),
+      },
+    })
+    if (!response.ok) throw new Error('Report export failed')
+
+    const content = await response.text()
+    downloadFile(filename, content)
+    apiOnline.value = true
+  } catch {
+    apiOnline.value = false
+    showSuccess('تعذر تنزيل التقرير من API.')
+  }
+}
+
 const printContract = (contract) => {
   const printWindow = window.open('', '_blank', 'width=900,height=700')
   if (!printWindow) return
@@ -1692,6 +1710,11 @@ onMounted(loadCurrentUser)
               <span>متبقي الأقساط</span>
               <strong>{{ formatMoney(installmentsReport?.remainingTotal || 0) }}</strong>
             </div>
+          </div>
+          <div class="report-actions">
+            <button class="text-button" type="button" @click="downloadReport('financial', 'propify-financial-report.csv')"><Download :size="18" /> المالي</button>
+            <button class="text-button" type="button" @click="downloadReport('properties', 'propify-properties-report.csv')"><Download :size="18" /> العقارات</button>
+            <button class="text-button" type="button" @click="downloadReport('installments', 'propify-installments-report.csv')"><Download :size="18" /> الأقساط</button>
           </div>
           <div class="chart" aria-label="مخطط مبيعات وإيجارات">
             <div v-for="bar in chartBars" :key="bar.label" class="chart-column">

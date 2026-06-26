@@ -741,6 +741,13 @@ td .row-actions {
   font-size: 1.05rem;
 }
 
+.report-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
 .chart {
   min-height: 234px;
   display: grid;

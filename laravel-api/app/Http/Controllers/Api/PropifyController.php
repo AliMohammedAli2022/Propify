@@ -589,7 +589,7 @@ class PropifyController extends Controller
         );
     }
 
-    public function financialReport(Request $request): JsonResponse
+    public function financialReport(Request $request)
     {
         $ledgerQuery = LedgerEntry::query();
         $this->applyDateRange($ledgerQuery, $request, 'entry_date');
@@ -597,8 +597,7 @@ class PropifyController extends Controller
         $entries = $ledgerQuery->get();
         $income = (float) $entries->where('direction', 'credit')->sum('amount');
         $expenses = (float) $entries->where('direction', 'debit')->sum('amount');
-
-        return $this->json([
+        $report = [
             'income' => $income,
             'expenses' => $expenses,
             'balance' => $income - $expenses,
@@ -607,10 +606,26 @@ class PropifyController extends Controller
             'contractsDue' => (float) Contract::sum('due'),
             'officeCommission' => (float) Contract::sum('commission'),
             'vouchersCount' => Voucher::count(),
-        ]);
+        ];
+
+        if ($request->query('export') === 'csv') {
+            return $this->csvResponse([
+                ['البند', 'القيمة'],
+                ['الإيرادات', $report['income']],
+                ['المصروفات', $report['expenses']],
+                ['الرصيد', $report['balance']],
+                ['إجمالي العقود', $report['contractsTotal']],
+                ['المدفوع من العقود', $report['contractsPaid']],
+                ['المتبقي من العقود', $report['contractsDue']],
+                ['عمولات المكتب', $report['officeCommission']],
+                ['عدد السندات', $report['vouchersCount']],
+            ], 'propify-financial-report.csv');
+        }
+
+        return $this->json($report);
     }
 
-    public function propertiesReport(Request $request): JsonResponse
+    public function propertiesReport(Request $request)
     {
         $query = Property::query();
 
@@ -619,6 +634,23 @@ class PropifyController extends Controller
         }
 
         $properties = $query->get();
+
+        if ($request->query('export') === 'csv') {
+            return $this->csvResponse([
+                ['رقم العقار', 'النوع', 'الغرض', 'المحافظة', 'المنطقة', 'المساحة', 'السعر', 'الحالة', 'المالك'],
+                ...$properties->map(fn (Property $property) => [
+                    $property->code,
+                    $property->type,
+                    $property->mode,
+                    $property->province,
+                    $property->area,
+                    $property->space,
+                    $property->price,
+                    $property->status,
+                    $property->owner,
+                ])->all(),
+            ], 'propify-properties-report.csv');
+        }
 
         return $this->json([
             'total' => $properties->count(),
@@ -629,7 +661,7 @@ class PropifyController extends Controller
         ]);
     }
 
-    public function installmentsReport(Request $request): JsonResponse
+    public function installmentsReport(Request $request)
     {
         $query = Installment::query()->orderBy('due_date');
         $this->applyDateRange($query, $request, 'due_date');
@@ -639,6 +671,21 @@ class PropifyController extends Controller
         }
 
         $installments = $query->get();
+
+        if ($request->query('export') === 'csv') {
+            return $this->csvResponse([
+                ['العقد', 'رقم القسط', 'تاريخ الاستحقاق', 'المبلغ', 'المدفوع', 'المتبقي', 'الحالة'],
+                ...$installments->map(fn (Installment $installment) => [
+                    $installment->contract_code,
+                    $installment->number,
+                    $installment->due_date->format('Y-m-d'),
+                    $installment->amount,
+                    $installment->paid_amount,
+                    (float) $installment->amount - (float) $installment->paid_amount,
+                    $installment->status,
+                ])->all(),
+            ], 'propify-installments-report.csv');
+        }
 
         return $this->json([
             'total' => $installments->count(),
@@ -663,6 +710,23 @@ class PropifyController extends Controller
                 'role' => $user->role,
                 'permissionsCount' => count($user->permissions ?? []),
             ])->values(),
+        ]);
+    }
+
+    private function csvResponse(array $rows, string $filename)
+    {
+        $handle = fopen('php://temp', 'r+');
+        foreach ($rows as $row) {
+            fputcsv($handle, $row);
+        }
+        rewind($handle);
+        $csv = stream_get_contents($handle);
+        fclose($handle);
+
+        return response("\xEF\xBB\xBF".$csv, 200)->withHeaders([
+            'Content-Type' => 'text/csv; charset=UTF-8',
+            'Content-Disposition' => "attachment; filename=\"{$filename}\"",
+            'Access-Control-Allow-Origin' => '*',
         ]);
     }
 

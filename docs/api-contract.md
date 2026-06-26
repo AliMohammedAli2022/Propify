@@ -267,7 +267,7 @@ Response item:
 - `from`
 - `to`
 - `status`
-- `export=xlsx`
+- `export=csv`
 
 Implemented report responses:
 
