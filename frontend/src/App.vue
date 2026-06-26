@@ -166,6 +166,7 @@ const users = ref([])
 const financialReport = ref(null)
 const propertiesReport = ref(null)
 const installmentsReport = ref(null)
+const employeePerformanceReport = ref(null)
 const notifications = ref([])
 const propertyMedia = ref([])
 const mediaErrors = ref({})
@@ -181,6 +182,11 @@ const settingsForm = ref({
   companyAddress: 'بغداد - العراق',
   defaultCurrency: 'دينار',
   defaultCommissionRate: 2,
+})
+const reportFilters = ref({
+  from: '',
+  to: '',
+  status: 'الكل',
 })
 
 const iraqiPhonePattern = /^(075|077|078|079)[0-9]{8}$/
@@ -246,6 +252,18 @@ const optionalApiRequest = async (path, fallback) => {
     if (error.status === 403) return fallback
     throw error
   }
+}
+
+const reportPath = (report, extra = {}) => {
+  const params = new URLSearchParams()
+  const filters = { ...reportFilters.value, ...extra }
+
+  Object.entries(filters).forEach(([key, value]) => {
+    if (value && value !== 'الكل') params.set(key, value)
+  })
+
+  const query = params.toString()
+  return `/reports/${report}${query ? `?${query}` : ''}`
 }
 
 const apiUpload = async (path, formData) => {
@@ -322,6 +340,7 @@ const loadApiData = async () => {
       serverFinancialReport,
       serverPropertiesReport,
       serverInstallmentsReport,
+      serverEmployeePerformanceReport,
       serverNotifications,
       serverSettings,
     ] = await Promise.all([
@@ -332,9 +351,10 @@ const loadApiData = async () => {
       optionalApiRequest('/vouchers', []),
       optionalApiRequest('/ledger', []),
       optionalApiRequest('/users', []),
-      optionalApiRequest('/reports/financial', null),
-      optionalApiRequest('/reports/properties', null),
-      optionalApiRequest('/reports/installments', null),
+      optionalApiRequest(reportPath('financial'), null),
+      optionalApiRequest(reportPath('properties'), null),
+      optionalApiRequest(reportPath('installments'), null),
+      optionalApiRequest(reportPath('employee-performance'), null),
       apiRequest('/notifications'),
       optionalApiRequest('/settings', settingsForm.value),
     ])
@@ -348,6 +368,7 @@ const loadApiData = async () => {
     financialReport.value = serverFinancialReport
     propertiesReport.value = serverPropertiesReport
     installmentsReport.value = serverInstallmentsReport
+    employeePerformanceReport.value = serverEmployeePerformanceReport
     notifications.value = serverNotifications
     settingsForm.value = { ...settingsForm.value, ...serverSettings }
     if (!mediaForm.value.propertyCode && serverProperties.length > 0) {
@@ -870,8 +891,8 @@ const payInstallment = (installment) => {
       apiRequest('/installments'),
       apiRequest('/vouchers'),
       apiRequest('/ledger'),
-      apiRequest('/reports/financial'),
-      apiRequest('/reports/installments'),
+      apiRequest(reportPath('financial')),
+      apiRequest(reportPath('installments')),
       apiRequest('/notifications'),
     ]))
     .then(([serverContracts, serverInstallments, serverVouchers, serverLedger, serverFinancialReport, serverInstallmentsReport, serverNotifications]) => {
@@ -926,7 +947,7 @@ const addVoucher = () => {
       }
       return Promise.all([
         apiRequest('/ledger'),
-        apiRequest('/reports/financial'),
+        apiRequest(reportPath('financial')),
         apiRequest('/notifications'),
       ])
     })
@@ -991,7 +1012,7 @@ const deleteVoucher = (voucher) => {
     .then(() => Promise.all([
       apiRequest('/vouchers'),
       apiRequest('/ledger'),
-      apiRequest('/reports/financial'),
+      apiRequest(reportPath('financial')),
       apiRequest('/notifications'),
     ]))
     .then(([serverVouchers, serverLedger, serverFinancialReport, serverNotifications]) => {
@@ -1088,6 +1109,13 @@ const financialSummary = computed(() => {
 })
 
 const propertyStatuses = computed(() => ['الكل', ...new Set(properties.value.map((property) => property.status))])
+const reportStatusOptions = computed(() => [
+  'الكل',
+  ...new Set([
+    ...properties.value.map((property) => property.status),
+    ...installments.value.map((installment) => installment.status),
+  ]),
+])
 
 const filteredProperties = computed(() => {
   const query = searchQuery.value.trim().toLowerCase()
@@ -1129,9 +1157,35 @@ const exportProperties = () => {
   downloadFile('propify-properties.csv', csv)
 }
 
+const loadReports = async () => {
+  try {
+    const [
+      serverFinancialReport,
+      serverPropertiesReport,
+      serverInstallmentsReport,
+      serverEmployeePerformanceReport,
+    ] = await Promise.all([
+      apiRequest(reportPath('financial')),
+      apiRequest(reportPath('properties')),
+      apiRequest(reportPath('installments')),
+      apiRequest(reportPath('employee-performance')),
+    ])
+
+    financialReport.value = serverFinancialReport
+    propertiesReport.value = serverPropertiesReport
+    installmentsReport.value = serverInstallmentsReport
+    employeePerformanceReport.value = serverEmployeePerformanceReport
+    apiOnline.value = true
+    showSuccess('تم تحديث التقارير حسب الفلاتر.')
+  } catch {
+    apiOnline.value = false
+    showSuccess('تعذر تحديث التقارير من API.')
+  }
+}
+
 const downloadReport = async (report, filename) => {
   try {
-    const response = await fetch(`${API_BASE_URL}/reports/${report}?export=csv`, {
+    const response = await fetch(`${API_BASE_URL}${reportPath(report, { export: 'csv' })}`, {
       headers: {
         ...(authToken.value ? { Authorization: `Bearer ${authToken.value}` } : {}),
       },
@@ -1782,6 +1836,23 @@ onMounted(loadCurrentUser)
             </div>
             <ChevronLeft :size="22" />
           </div>
+          <form class="smart-form report-filter-form" @submit.prevent="loadReports">
+            <label>
+              <span>من تاريخ</span>
+              <input v-model="reportFilters.from" type="date" />
+            </label>
+            <label>
+              <span>إلى تاريخ</span>
+              <input v-model="reportFilters.to" type="date" />
+            </label>
+            <label>
+              <span>الحالة</span>
+              <select v-model="reportFilters.status">
+                <option v-for="status in reportStatusOptions" :key="status">{{ status }}</option>
+              </select>
+            </label>
+            <button class="submit-button" type="submit"><Search :size="18" /> تحديث التقارير</button>
+          </form>
           <div class="report-grid">
             <div>
               <span>الإيرادات</span>
@@ -1799,11 +1870,25 @@ onMounted(loadCurrentUser)
               <span>متبقي الأقساط</span>
               <strong>{{ formatMoney(installmentsReport?.remainingTotal || 0) }}</strong>
             </div>
+            <div>
+              <span>عدد المستخدمين</span>
+              <strong>{{ employeePerformanceReport?.usersTotal || 0 }}</strong>
+            </div>
           </div>
           <div class="report-actions">
             <button class="text-button" type="button" @click="downloadReport('financial', 'propify-financial-report.csv')"><Download :size="18" /> المالي</button>
             <button class="text-button" type="button" @click="downloadReport('properties', 'propify-properties-report.csv')"><Download :size="18" /> العقارات</button>
             <button class="text-button" type="button" @click="downloadReport('installments', 'propify-installments-report.csv')"><Download :size="18" /> الأقساط</button>
+            <button class="text-button" type="button" @click="downloadReport('employee-performance', 'propify-employee-performance-report.csv')"><Download :size="18" /> الموظفون</button>
+          </div>
+          <div class="stack-list report-users">
+            <div v-for="user in employeePerformanceReport?.users?.slice(0, 5) || []" :key="user.id" class="list-row">
+              <div>
+                <strong>{{ user.name }}</strong>
+                <span>{{ user.email }} · {{ roleLabel(user.role) }}</span>
+              </div>
+              <small>{{ user.permissionsCount }} صلاحيات</small>
+            </div>
           </div>
           <div class="chart" aria-label="مخطط مبيعات وإيجارات">
             <div v-for="bar in chartBars" :key="bar.label" class="chart-column">

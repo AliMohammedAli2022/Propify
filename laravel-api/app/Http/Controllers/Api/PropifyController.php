@@ -952,24 +952,38 @@ class PropifyController extends Controller
         ]);
     }
 
-    public function employeePerformanceReport(Request $request): JsonResponse
+    public function employeePerformanceReport(Request $request)
     {
         if ($guard = $this->guard($request, 'reports.view')) {
             return $guard;
         }
 
         $users = User::query()->latest()->get();
-
-        return $this->json([
+        $report = [
             'usersTotal' => $users->count(),
             'byRole' => $this->groupCounts($users, 'role'),
             'users' => $users->map(fn (User $user) => [
                 'id' => $user->id,
                 'name' => $user->name,
+                'email' => $user->email,
                 'role' => $user->role,
                 'permissionsCount' => count($user->permissions ?? []),
             ])->values(),
-        ]);
+        ];
+
+        if ($request->query('export') === 'csv') {
+            return $this->csvResponse([
+                ['الاسم', 'البريد', 'الدور', 'عدد الصلاحيات'],
+                ...$users->map(fn (User $user) => [
+                    $user->name,
+                    $user->email,
+                    $user->role,
+                    count($user->permissions ?? []),
+                ])->all(),
+            ], 'propify-employee-performance-report.csv');
+        }
+
+        return $this->json($report);
     }
 
     private function csvResponse(array $rows, string $filename)
