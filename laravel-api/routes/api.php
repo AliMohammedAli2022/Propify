@@ -31,6 +31,8 @@ Route::get('/installments', [PropifyController::class, 'installments']);
 Route::post('/installments/{installment}/pay', [PropifyController::class, 'payInstallment']);
 Route::get('/vouchers', [PropifyController::class, 'vouchers']);
 Route::post('/vouchers', [PropifyController::class, 'storeVoucher']);
+Route::put('/vouchers/{voucher:code}', [PropifyController::class, 'updateVoucher']);
+Route::delete('/vouchers/{voucher:code}', [PropifyController::class, 'deleteVoucher']);
 Route::get('/ledger', [PropifyController::class, 'ledger']);
 Route::get('/notifications', [PropifyController::class, 'notifications']);
 Route::get('/reports/financial', [PropifyController::class, 'financialReport']);

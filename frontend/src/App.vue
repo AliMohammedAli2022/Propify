@@ -630,6 +630,7 @@ const voucherForm = ref({
   propertyCode: '',
   contractCode: '',
 })
+const editingVoucherCode = ref('')
 
 const contractForm = ref({
   propertyCode: '',
@@ -810,19 +811,32 @@ const addVoucher = () => {
     ...voucherForm.value,
     amount: Number(String(voucherForm.value.amount).replaceAll(',', '')),
   }
+  const endpoint = editingVoucherCode.value ? `/vouchers/${editingVoucherCode.value}` : '/vouchers'
+  const method = editingVoucherCode.value ? 'PUT' : 'POST'
 
-  apiRequest('/vouchers', {
-    method: 'POST',
+  apiRequest(endpoint, {
+    method,
     body: JSON.stringify(payload),
   })
     .then((createdVoucher) => {
-      vouchers.value.unshift(createdVoucher)
-      return apiRequest('/ledger')
+      if (editingVoucherCode.value) {
+        vouchers.value = vouchers.value.map((voucher) => (voucher.code === createdVoucher.code ? createdVoucher : voucher))
+      } else {
+        vouchers.value.unshift(createdVoucher)
+      }
+      return Promise.all([
+        apiRequest('/ledger'),
+        apiRequest('/reports/financial'),
+        apiRequest('/notifications'),
+      ])
     })
-    .then((serverLedger) => {
+    .then(([serverLedger, serverFinancialReport, serverNotifications]) => {
       ledger.value = serverLedger
+      financialReport.value = serverFinancialReport
+      notifications.value = serverNotifications
       apiOnline.value = true
-      showSuccess('تم حفظ السند وتحديث دفتر الأستاذ.')
+      showSuccess(editingVoucherCode.value ? 'تم تحديث السند ودفتر الأستاذ.' : 'تم حفظ السند وتحديث دفتر الأستاذ.')
+      resetVoucherForm()
     })
     .catch((error) => {
       apiOnline.value = false
@@ -830,15 +844,69 @@ const addVoucher = () => {
         voucherErrors.value = error.errors
         return
       }
-      vouchers.value.unshift({ ...payload, code: `LOCAL-${Date.now()}`, issuedAt: new Date().toISOString().slice(0, 10) })
-      showSuccess('تمت إضافة السند محلياً. شغّل API لحفظه في السيرفر.')
+      if (!editingVoucherCode.value) {
+        vouchers.value.unshift({ ...payload, code: `LOCAL-${Date.now()}`, issuedAt: new Date().toISOString().slice(0, 10) })
+        showSuccess('تمت إضافة السند محلياً. شغّل API لحفظه في السيرفر.')
+      }
     })
+}
 
+const resetVoucherForm = () => {
+  voucherForm.value.type = 'قبض'
   voucherForm.value.client = ''
   voucherForm.value.amount = ''
   voucherForm.value.reason = ''
   voucherForm.value.propertyCode = ''
   voucherForm.value.contractCode = ''
+  editingVoucherCode.value = ''
+}
+
+const startEditVoucher = (voucher) => {
+  if (!voucher.code?.startsWith('RV-') && !voucher.code?.startsWith('PV-')) {
+    showSuccess('هذا السند محلي فقط، أعد تحميل API قبل تعديله.')
+    return
+  }
+
+  voucherForm.value.type = voucher.type
+  voucherForm.value.client = voucher.client
+  voucherForm.value.amount = String(voucher.amount || '')
+  voucherForm.value.reason = voucher.reason
+  voucherForm.value.propertyCode = voucher.propertyCode || ''
+  voucherForm.value.contractCode = voucher.contractCode || ''
+  editingVoucherCode.value = voucher.code
+  activeSection.value = 'finance'
+  showSuccess(`تم تحميل السند ${voucher.code} للتعديل.`)
+}
+
+const deleteVoucher = (voucher) => {
+  if (!voucher.code?.startsWith('RV-') && !voucher.code?.startsWith('PV-')) {
+    vouchers.value = vouchers.value.filter((item) => item.code !== voucher.code)
+    showSuccess(`تم حذف السند المحلي ${voucher.code}.`)
+    return
+  }
+
+  if (!window.confirm(`هل تريد حذف السند ${voucher.code}؟`)) return
+
+  apiRequest(`/vouchers/${voucher.code}`, { method: 'DELETE' })
+    .then(() => Promise.all([
+      apiRequest('/vouchers'),
+      apiRequest('/ledger'),
+      apiRequest('/reports/financial'),
+      apiRequest('/notifications'),
+    ]))
+    .then(([serverVouchers, serverLedger, serverFinancialReport, serverNotifications]) => {
+      vouchers.value = serverVouchers
+      ledger.value = serverLedger
+      financialReport.value = serverFinancialReport
+      notifications.value = serverNotifications
+      apiOnline.value = true
+      showSuccess(`تم حذف السند ${voucher.code}.`)
+    })
+    .catch((error) => {
+      apiOnline.value = false
+      const message = error.errors?.voucher?.[0] || 'تعذر حذف السند.'
+      showSuccess(message)
+    })
 }
 
 const fallbackNotifications = computed(() => [
@@ -1536,8 +1604,22 @@ onMounted(loadCurrentUser)
               <span>العقد</span>
               <input v-model="voucherForm.contractCode" placeholder="CT-2026-000044" />
             </label>
-            <button class="submit-button" type="submit"><Plus :size="18" /> حفظ السند</button>
+            <button class="submit-button" type="submit"><Plus :size="18" /> {{ editingVoucherCode ? 'حفظ التعديل' : 'حفظ السند' }}</button>
+            <button v-if="editingVoucherCode" class="text-button ghost-button" type="button" @click="resetVoucherForm">إلغاء التعديل</button>
           </form>
+          <div class="stack-list vouchers-list">
+            <div v-for="voucher in vouchers.slice(0, 6)" :key="voucher.code" class="list-row">
+              <div>
+                <strong>{{ voucher.code }}</strong>
+                <span>{{ voucher.type }} · {{ voucher.client }} · {{ voucher.reason }}</span>
+              </div>
+              <div class="row-actions">
+                <small>{{ formatMoney(voucher.amount) }}</small>
+                <button class="mini-button" type="button" title="تعديل السند" @click="startEditVoucher(voucher)">ت</button>
+                <button class="mini-button danger-action" type="button" title="حذف السند" @click="deleteVoucher(voucher)">×</button>
+              </div>
+            </div>
+          </div>
         </article>
 
         <article v-if="showSection('dashboard', 'finance')" class="panel">

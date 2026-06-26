@@ -459,43 +459,58 @@ class PropifyController extends Controller
 
     public function storeVoucher(Request $request): JsonResponse
     {
-        $validator = Validator::make($request->all(), [
-            'type' => ['required', 'in:قبض,دفع'],
-            'client' => ['required', 'string'],
-            'amount' => ['required', 'numeric', 'gt:0'],
-            'reason' => ['required', 'string'],
-            'propertyCode' => ['nullable', 'string'],
-            'contractCode' => ['nullable', 'string'],
-            'issuedAt' => ['nullable', 'date'],
-        ], $this->messages());
+        $validator = Validator::make($request->all(), $this->voucherRules(), $this->messages());
 
         if ($validator->fails()) {
             return $this->json(['message' => 'Validation failed', 'errors' => $validator->errors()], 422);
         }
 
         $prefix = $request->input('type') === 'قبض' ? 'RV' : 'PV';
-        $issuedAt = $request->input('issuedAt', Carbon::now()->toDateString());
-
         $voucher = Voucher::create([
             'code' => $this->nextCode(Voucher::class, $prefix, 0),
-            'type' => $request->string('type'),
-            'client' => $request->string('client'),
-            'amount' => $this->money($request->input('amount')),
-            'reason' => $request->string('reason'),
-            'property_code' => $request->input('propertyCode'),
-            'contract_code' => $request->input('contractCode'),
-            'issued_at' => $issuedAt,
+            ...$this->voucherData($request),
         ]);
 
-        LedgerEntry::create([
-            'code' => $this->nextCode(LedgerEntry::class, 'LE', 0),
-            'direction' => $voucher->type === 'قبض' ? 'credit' : 'debit',
-            'amount' => $voucher->amount,
-            'description' => "سند {$voucher->type} {$voucher->code}",
-            'entry_date' => $issuedAt,
-        ]);
+        $this->syncVoucherLedger($voucher);
 
         return $this->json($this->voucherResource($voucher), 201);
+    }
+
+    public function updateVoucher(Request $request, Voucher $voucher): JsonResponse
+    {
+        if (Str::startsWith($voucher->reason, 'تسديد قسط')) {
+            return $this->json([
+                'message' => 'لا يمكن تعديل سند ناتج عن تسديد قسط.',
+                'errors' => ['voucher' => ['لا يمكن تعديل سند ناتج عن تسديد قسط.']],
+            ], 409);
+        }
+
+        $validator = Validator::make($request->all(), $this->voucherRules(), $this->messages());
+
+        if ($validator->fails()) {
+            return $this->json(['message' => 'Validation failed', 'errors' => $validator->errors()], 422);
+        }
+
+        LedgerEntry::where('description', 'like', "%{$voucher->code}%")->delete();
+        $voucher->update($this->voucherData($request));
+        $this->syncVoucherLedger($voucher->refresh());
+
+        return $this->json($this->voucherResource($voucher->refresh()));
+    }
+
+    public function deleteVoucher(Voucher $voucher): JsonResponse
+    {
+        if (Str::startsWith($voucher->reason, 'تسديد قسط')) {
+            return $this->json([
+                'message' => 'لا يمكن حذف سند ناتج عن تسديد قسط.',
+                'errors' => ['voucher' => ['لا يمكن حذف سند ناتج عن تسديد قسط.']],
+            ], 409);
+        }
+
+        LedgerEntry::where('description', 'like', "%{$voucher->code}%")->delete();
+        $voucher->delete();
+
+        return $this->json(['ok' => true]);
     }
 
     public function ledger(): JsonResponse
@@ -760,6 +775,45 @@ class PropifyController extends Controller
             'commission' => round($total * ($commissionRate / 100)),
             'status' => $request->input('status', 'نشط'),
         ];
+    }
+
+    private function voucherRules(): array
+    {
+        return [
+            'type' => ['required', 'in:قبض,دفع'],
+            'client' => ['required', 'string'],
+            'amount' => ['required', 'numeric', 'gt:0'],
+            'reason' => ['required', 'string'],
+            'propertyCode' => ['nullable', 'string'],
+            'contractCode' => ['nullable', 'string'],
+            'issuedAt' => ['nullable', 'date'],
+        ];
+    }
+
+    private function voucherData(Request $request): array
+    {
+        return [
+            'type' => $request->string('type'),
+            'client' => $request->string('client'),
+            'amount' => $this->money($request->input('amount')),
+            'reason' => $request->string('reason'),
+            'property_code' => $request->input('propertyCode'),
+            'contract_code' => $request->input('contractCode'),
+            'issued_at' => $request->input('issuedAt', Carbon::now()->toDateString()),
+        ];
+    }
+
+    private function syncVoucherLedger(Voucher $voucher): void
+    {
+        LedgerEntry::updateOrCreate(
+            ['description' => "سند {$voucher->type} {$voucher->code}"],
+            [
+                'code' => LedgerEntry::where('description', "سند {$voucher->type} {$voucher->code}")->value('code') ?? $this->nextCode(LedgerEntry::class, 'LE', 0),
+                'direction' => $voucher->type === 'قبض' ? 'credit' : 'debit',
+                'amount' => $voucher->amount,
+                'entry_date' => $voucher->issued_at,
+            ],
+        );
     }
 
     private function applyDateRange($query, Request $request, string $column): void

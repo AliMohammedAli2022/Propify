@@ -180,6 +180,10 @@ Expected behavior:
 
 `POST /api/vouchers`
 
+`PUT /api/vouchers/{code}`
+
+`DELETE /api/vouchers/{code}`
+
 ```json
 {
   "type": "receipt",
