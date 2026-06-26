@@ -42,6 +42,7 @@ Route::get('/ledger', [PropifyController::class, 'ledger']);
 Route::get('/notifications', [PropifyController::class, 'notifications']);
 Route::get('/activity-logs', [PropifyController::class, 'activityLogs']);
 Route::get('/backup/export', [PropifyController::class, 'exportBackup']);
+Route::post('/backup/import', [PropifyController::class, 'importBackup']);
 Route::get('/settings', [PropifyController::class, 'settings']);
 Route::put('/settings', [PropifyController::class, 'updateSettings']);
 Route::get('/reports/financial', [PropifyController::class, 'financialReport']);

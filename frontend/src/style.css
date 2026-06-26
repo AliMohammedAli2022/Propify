@@ -702,6 +702,39 @@ th {
   opacity: 0.45;
 }
 
+.backup-import-actions {
+  flex-wrap: wrap;
+}
+
+.backup-file-control {
+  width: min(180px, 44vw);
+  min-height: 34px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--muted);
+  font-size: 0.8rem;
+  cursor: pointer;
+  overflow: hidden;
+}
+
+.backup-file-control input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.backup-file-control span {
+  max-width: 100%;
+  padding: 0 10px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .row-actions {
   display: flex;
   gap: 6px;

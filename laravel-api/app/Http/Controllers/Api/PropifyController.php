@@ -16,6 +16,7 @@ use App\Models\Voucher;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Validator;
@@ -976,6 +977,181 @@ class PropifyController extends Controller
             'Content-Disposition' => 'attachment; filename="propify-backup-'.$createdAt->format('Ymd-His').'.json"',
             'Access-Control-Allow-Origin' => '*',
         ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_PRETTY_PRINT);
+    }
+
+    public function importBackup(Request $request): JsonResponse
+    {
+        if ($guard = $this->guard($request, 'settings.update')) {
+            return $guard;
+        }
+
+        $validator = Validator::make($request->all(), [
+            'backup' => ['required', 'file', 'max:51200'],
+        ], $this->messages());
+
+        if ($validator->fails()) {
+            return $this->json(['message' => 'Validation failed', 'errors' => $validator->errors()], 422);
+        }
+
+        $payload = json_decode((string) file_get_contents($request->file('backup')->getRealPath()), true);
+        if (! is_array($payload) || data_get($payload, 'meta.app') !== 'Propify') {
+            return $this->json(['message' => 'Invalid backup file', 'errors' => ['backup' => ['ملف النسخة الاحتياطية غير صالح.']]], 422);
+        }
+
+        $summary = DB::transaction(function () use ($payload) {
+            $summary = [
+                'settings' => 0,
+                'users' => 0,
+                'clients' => 0,
+                'properties' => 0,
+                'contracts' => 0,
+                'installments' => 0,
+                'vouchers' => 0,
+                'ledger' => 0,
+            ];
+
+            if ($settings = data_get($payload, 'settings')) {
+                $this->appSettings()->update([
+                    'company_name' => data_get($settings, 'companyName', 'Propify'),
+                    'company_phone' => data_get($settings, 'companyPhone'),
+                    'company_email' => data_get($settings, 'companyEmail'),
+                    'company_address' => data_get($settings, 'companyAddress'),
+                    'default_currency' => data_get($settings, 'defaultCurrency', 'دينار'),
+                    'default_commission_rate' => (float) data_get($settings, 'defaultCommissionRate', 2),
+                ]);
+                $summary['settings'] = 1;
+            }
+
+            foreach (data_get($payload, 'users', []) as $userData) {
+                $email = data_get($userData, 'email');
+                if (! $email) {
+                    continue;
+                }
+
+                $user = User::firstOrNew(['email' => $email]);
+                $user->fill([
+                    'name' => data_get($userData, 'name', $email),
+                    'role' => data_get($userData, 'role', 'sales'),
+                    'permissions' => data_get($userData, 'permissions', []),
+                ]);
+                if (! $user->exists) {
+                    $user->password = Hash::make(Str::random(24));
+                }
+                $user->save();
+                $summary['users']++;
+            }
+
+            foreach (data_get($payload, 'clients', []) as $clientData) {
+                $phone = data_get($clientData, 'phone');
+                if (! $phone) {
+                    continue;
+                }
+
+                Client::updateOrCreate(['phone' => $phone], [
+                    'name' => data_get($clientData, 'name', 'عميل'),
+                    'role' => data_get($clientData, 'role', 'مشتري'),
+                    'national_id' => data_get($clientData, 'nationalId'),
+                    'stage' => data_get($clientData, 'stage', 'عميل محتمل'),
+                    'source' => data_get($clientData, 'source'),
+                ]);
+                $summary['clients']++;
+            }
+
+            foreach (data_get($payload, 'properties', []) as $propertyData) {
+                $code = data_get($propertyData, 'code');
+                if (! $code) {
+                    continue;
+                }
+
+                Property::updateOrCreate(['code' => $code], [
+                    'type' => data_get($propertyData, 'type', 'عقار'),
+                    'mode' => data_get($propertyData, 'mode', 'بيع'),
+                    'province' => data_get($propertyData, 'province', 'بغداد'),
+                    'area' => data_get($propertyData, 'area', '-'),
+                    'space' => (float) data_get($propertyData, 'space', 1),
+                    'rooms' => (int) data_get($propertyData, 'rooms', 0),
+                    'price' => $this->money(data_get($propertyData, 'price', 0)),
+                    'status' => data_get($propertyData, 'status', 'قيد المراجعة'),
+                    'owner' => data_get($propertyData, 'owner', '-'),
+                    'negotiable' => (bool) data_get($propertyData, 'negotiable', true),
+                ]);
+                $summary['properties']++;
+            }
+
+            foreach (data_get($payload, 'contracts', []) as $contractData) {
+                $code = data_get($contractData, 'code');
+                if (! $code) {
+                    continue;
+                }
+
+                Contract::updateOrCreate(['code' => $code], [
+                    'property_code' => data_get($contractData, 'propertyCode', ''),
+                    'client' => data_get($contractData, 'client', ''),
+                    'kind' => data_get($contractData, 'kind', 'بيع نقدي'),
+                    'total' => (float) data_get($contractData, 'total', 0),
+                    'paid' => (float) data_get($contractData, 'paid', 0),
+                    'due' => (float) data_get($contractData, 'due', 0),
+                    'commission' => (float) data_get($contractData, 'commission', 0),
+                    'status' => data_get($contractData, 'status', 'نشط'),
+                ]);
+                $summary['contracts']++;
+            }
+
+            foreach (data_get($payload, 'installments', []) as $installmentData) {
+                $contractCode = data_get($installmentData, 'contractCode');
+                $number = data_get($installmentData, 'number');
+                if (! $contractCode || ! $number) {
+                    continue;
+                }
+
+                Installment::updateOrCreate(['contract_code' => $contractCode, 'number' => $number], [
+                    'due_date' => data_get($installmentData, 'dueDate', now()->toDateString()),
+                    'amount' => (float) data_get($installmentData, 'amount', 0),
+                    'paid_amount' => (float) data_get($installmentData, 'paidAmount', 0),
+                    'status' => data_get($installmentData, 'status', 'بانتظار'),
+                ]);
+                $summary['installments']++;
+            }
+
+            foreach (data_get($payload, 'vouchers', []) as $voucherData) {
+                $code = data_get($voucherData, 'code');
+                if (! $code) {
+                    continue;
+                }
+
+                Voucher::updateOrCreate(['code' => $code], [
+                    'type' => data_get($voucherData, 'type', 'قبض'),
+                    'client' => data_get($voucherData, 'client', '-'),
+                    'amount' => (float) data_get($voucherData, 'amount', 0),
+                    'reason' => data_get($voucherData, 'reason', '-'),
+                    'property_code' => data_get($voucherData, 'propertyCode'),
+                    'contract_code' => data_get($voucherData, 'contractCode'),
+                    'issued_at' => data_get($voucherData, 'issuedAt', now()->toDateString()),
+                ]);
+                $summary['vouchers']++;
+            }
+
+            foreach (data_get($payload, 'ledger', []) as $entryData) {
+                $code = data_get($entryData, 'code');
+                if (! $code) {
+                    continue;
+                }
+
+                LedgerEntry::updateOrCreate(['code' => $code], [
+                    'direction' => data_get($entryData, 'direction', 'credit'),
+                    'amount' => (float) data_get($entryData, 'amount', 0),
+                    'description' => data_get($entryData, 'description', '-'),
+                    'entry_date' => data_get($entryData, 'entryDate', now()->toDateString()),
+                ]);
+                $summary['ledger']++;
+            }
+
+            return $summary;
+        });
+
+        $this->logActivity($request, 'import', 'backup', (string) now()->timestamp, 'استيراد نسخة احتياطية للنظام', $summary);
+
+        return $this->json(['ok' => true, 'summary' => $summary]);
     }
 
     public function settings(Request $request): JsonResponse

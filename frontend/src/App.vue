@@ -23,6 +23,7 @@ import {
   Settings,
   ShieldCheck,
   Sun,
+  Upload,
   Users,
   WalletCards,
 } from '@lucide/vue'
@@ -206,6 +207,8 @@ const mediaForm = ref({
   files: [],
 })
 const settingsErrors = ref({})
+const backupImportErrors = ref({})
+const backupImportFile = ref(null)
 const settingsForm = ref({
   companyName: 'Propify',
   companyPhone: '07700000000',
@@ -1907,6 +1910,39 @@ const downloadBackup = async () => {
   }
 }
 
+const onBackupImportFileChange = (event) => {
+  backupImportFile.value = event.target.files?.[0] || null
+  backupImportErrors.value = {}
+}
+
+const importBackup = () => {
+  backupImportErrors.value = {}
+
+  if (!backupImportFile.value) {
+    backupImportErrors.value = { backup: ['يرجى اختيار ملف نسخة احتياطية.'] }
+    return
+  }
+
+  const shouldImport = window.confirm('سيتم دمج بيانات النسخة الاحتياطية مع البيانات الحالية. هل تريد المتابعة؟')
+  if (!shouldImport) return
+
+  const formData = new FormData()
+  formData.append('backup', backupImportFile.value)
+
+  apiUpload('/backup/import', formData)
+    .then((result) => {
+      backupImportFile.value = null
+      apiOnline.value = true
+      const importedCount = Object.values(result.summary || {}).reduce((sum, value) => sum + Number(value || 0), 0)
+      showSuccess(`تم استيراد النسخة الاحتياطية ودمج ${importedCount} سجل.`)
+      return loadApiData()
+    })
+    .catch((error) => {
+      apiOnline.value = false
+      backupImportErrors.value = error.errors || { backup: ['تعذر استيراد النسخة الاحتياطية.'] }
+    })
+}
+
 const printDocument = async (path) => {
   const printWindow = window.open('', '_blank', 'width=900,height=700')
   if (!printWindow) return
@@ -2971,10 +3007,20 @@ onMounted(loadCurrentUser)
               <div>
                 <strong>النسخ الاحتياطي</strong>
                 <span>تصدير ملف JSON يحتوي بيانات النظام التشغيلية.</span>
+                <small v-if="backupImportErrors.backup" class="field-error"><AlertCircle :size="14" />{{ backupImportErrors.backup[0] }}</small>
               </div>
-              <button class="mini-button" type="button" title="تنزيل نسخة احتياطية" @click="downloadBackup">
-                <Download :size="17" />
-              </button>
+              <div class="row-actions backup-import-actions">
+                <label class="backup-file-control" title="اختيار ملف نسخة احتياطية">
+                  <input type="file" accept=".json,application/json,text/plain" @change="onBackupImportFileChange" />
+                  <span>{{ backupImportFile?.name || 'اختيار ملف' }}</span>
+                </label>
+                <button class="mini-button" type="button" title="تنزيل نسخة احتياطية" @click="downloadBackup">
+                  <Download :size="17" />
+                </button>
+                <button class="mini-button" type="button" title="استيراد نسخة احتياطية" :disabled="!backupImportFile" @click="importBackup">
+                  <Upload :size="17" />
+                </button>
+              </div>
             </div>
             <div class="list-row">
               <div>
