@@ -9,8 +9,10 @@ use App\Models\Client;
 use App\Models\Contract;
 use App\Models\Installment;
 use App\Models\LedgerEntry;
+use App\Models\Permission;
 use App\Models\Property;
 use App\Models\PropertyMedia;
+use App\Models\Role;
 use App\Models\User;
 use App\Models\Voucher;
 use Carbon\Carbon;
@@ -20,6 +22,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Validation\Rule;
 use Illuminate\Support\Str;
 
 class PropifyController extends Controller
@@ -134,6 +137,29 @@ class PropifyController extends Controller
         }
 
         return $this->json($users->map(fn (User $user) => $this->userResource($user)));
+    }
+
+    public function accessControl(Request $request): JsonResponse
+    {
+        if ($guard = $this->guard($request, 'users.manage')) {
+            return $guard;
+        }
+
+        $this->syncAccessControlCatalog();
+
+        return $this->json([
+            'roles' => Role::with('permissions')->orderBy('id')->get()->map(fn (Role $role) => [
+                'key' => $role->key,
+                'name' => $role->name,
+                'description' => $role->description,
+                'permissions' => $role->permissions->pluck('key')->values(),
+            ])->values(),
+            'permissions' => Permission::orderBy('id')->get()->map(fn (Permission $permission) => [
+                'key' => $permission->key,
+                'name' => $permission->name,
+                'group' => $permission->group,
+            ])->values(),
+        ]);
     }
 
     public function storeUser(Request $request): JsonResponse
@@ -1506,25 +1532,29 @@ HTML;
 
     private function userRules(?User $user = null): array
     {
+        $this->syncAccessControlCatalog();
         $emailRule = $user ? 'unique:users,email,'.$user->id : 'unique:users,email';
+        $roleKeys = Role::pluck('key')->push('system_admin')->unique()->values()->all();
+        $permissionKeys = Permission::pluck('key')->all();
 
         return [
             'name' => ['required', 'string'],
             'email' => ['required', 'email', $emailRule],
             'password' => [$user ? 'nullable' : 'required', 'string', 'min:6'],
-            'role' => ['required', 'string'],
+            'role' => ['required', 'string', Rule::in($roleKeys)],
             'permissions' => ['array'],
-            'permissions.*' => ['string'],
+            'permissions.*' => ['string', Rule::in($permissionKeys)],
         ];
     }
 
     private function userData(Request $request, bool $requirePassword): array
     {
+        $role = (string) $request->string('role');
         $data = [
             'name' => $request->string('name'),
             'email' => $request->string('email'),
-            'role' => $request->string('role'),
-            'permissions' => $request->input('permissions', []),
+            'role' => $role,
+            'permissions' => $this->normalizedUserPermissions($role, $request->input('permissions', [])),
         ];
 
         if ($requirePassword || $request->filled('password')) {
@@ -1532,6 +1562,95 @@ HTML;
         }
 
         return $data;
+    }
+
+    private function normalizedUserPermissions(string $roleKey, array $selectedPermissions): array
+    {
+        $allPermissions = Permission::pluck('key')->all();
+        if ($roleKey === 'system_admin') {
+            return $allPermissions;
+        }
+
+        $rolePermissions = Role::where('key', $roleKey)
+            ->with('permissions')
+            ->first()
+            ?->permissions
+            ->pluck('key')
+            ->all() ?? [];
+
+        $permissions = $selectedPermissions ?: $rolePermissions;
+
+        return collect($permissions)
+            ->intersect($allPermissions)
+            ->unique()
+            ->values()
+            ->all();
+    }
+
+    private function syncAccessControlCatalog(): void
+    {
+        DB::transaction(function () {
+            $permissionIds = [];
+
+            foreach ($this->permissionCatalog() as $permissionData) {
+                $permission = Permission::updateOrCreate(
+                    ['key' => $permissionData['key']],
+                    [
+                        'name' => $permissionData['name'],
+                        'group' => $permissionData['group'],
+                    ],
+                );
+                $permissionIds[$permission->key] = $permission->id;
+            }
+
+            foreach ($this->roleCatalog() as $roleData) {
+                $role = Role::updateOrCreate(
+                    ['key' => $roleData['key']],
+                    [
+                        'name' => $roleData['name'],
+                        'description' => $roleData['description'],
+                    ],
+                );
+
+                $role->permissions()->sync(
+                    collect($roleData['permissions'])
+                        ->map(fn (string $permissionKey) => $permissionIds[$permissionKey] ?? null)
+                        ->filter()
+                        ->values()
+                        ->all()
+                );
+            }
+        });
+    }
+
+    private function permissionCatalog(): array
+    {
+        return [
+            ['key' => 'properties.create', 'name' => 'إضافة عقار', 'group' => 'العقارات'],
+            ['key' => 'properties.update', 'name' => 'تعديل عقار', 'group' => 'العقارات'],
+            ['key' => 'properties.approve', 'name' => 'قبول عقار من عميل', 'group' => 'العقارات'],
+            ['key' => 'clients.manage', 'name' => 'إدارة العملاء', 'group' => 'العملاء'],
+            ['key' => 'contracts.create', 'name' => 'إنشاء عقد', 'group' => 'العقود'],
+            ['key' => 'contracts.print', 'name' => 'طباعة عقد', 'group' => 'العقود'],
+            ['key' => 'vouchers.manage', 'name' => 'إدارة السندات', 'group' => 'الحسابات'],
+            ['key' => 'reports.view', 'name' => 'مشاهدة التقارير', 'group' => 'التقارير'],
+            ['key' => 'settings.update', 'name' => 'تعديل الإعدادات', 'group' => 'النظام'],
+            ['key' => 'users.manage', 'name' => 'إدارة المستخدمين', 'group' => 'النظام'],
+        ];
+    }
+
+    private function roleCatalog(): array
+    {
+        $all = collect($this->permissionCatalog())->pluck('key')->all();
+
+        return [
+            ['key' => 'system_admin', 'name' => 'مدير النظام', 'description' => 'صلاحية كاملة على النظام.', 'permissions' => $all],
+            ['key' => 'office_manager', 'name' => 'مدير المكتب', 'description' => 'إدارة العمليات اليومية والتقارير والمستخدمين.', 'permissions' => $all],
+            ['key' => 'sales', 'name' => 'موظف مبيعات', 'description' => 'إدارة العملاء والعقود الأساسية.', 'permissions' => ['properties.create', 'properties.update', 'clients.manage', 'contracts.create', 'contracts.print']],
+            ['key' => 'accountant', 'name' => 'محاسب', 'description' => 'إدارة السندات والتقارير المالية.', 'permissions' => ['vouchers.manage', 'reports.view']],
+            ['key' => 'data_entry', 'name' => 'مدخل بيانات', 'description' => 'إدخال العقارات والعملاء بدون اعتماد نهائي.', 'permissions' => ['properties.create', 'clients.manage']],
+            ['key' => 'property_supervisor', 'name' => 'مشرف عقارات', 'description' => 'تعديل واعتماد بيانات العقارات.', 'permissions' => ['properties.create', 'properties.update', 'properties.approve', 'clients.manage']],
+        ];
     }
 
     private function propertyRules(): array

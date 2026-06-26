@@ -6,7 +6,7 @@
 
 أضيفت مصادقة مبدئية تعتمد على token محفوظ في جدول المستخدمين. يمكن لاحقاً استبدالها بـ Laravel Sanctum عند توسيع صلاحيات المستخدمين والجلسات.
 
-أضيفت إدارة مستخدمين مبدئية عبر `GET /api/users` و`POST /api/users` مع أدوار وصلاحيات JSON قابلة للتطوير لاحقاً إلى جداول roles/permissions مستقلة.
+أضيفت إدارة مستخدمين عبر `GET /api/users` و`POST /api/users`، مع كتالوج أدوار وصلاحيات مستقل عبر جداول `roles`, `permissions`, و`permission_role` وendpoint `GET /api/access-control`.
 
 ## المرحلة 1
 

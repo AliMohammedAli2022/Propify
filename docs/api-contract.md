@@ -37,6 +37,26 @@ Sensitive actions additionally require matching user permissions such as `users.
 
 ## Users
 
+`GET /api/access-control`
+
+Requires `users.manage`. Returns the role and permission catalog used by the users UI.
+
+```json
+{
+  "roles": [
+    {
+      "key": "sales",
+      "name": "موظف مبيعات",
+      "description": "إدارة العملاء والعقود الأساسية.",
+      "permissions": ["properties.create", "clients.manage"]
+    }
+  ],
+  "permissions": [
+    { "key": "clients.manage", "name": "إدارة العملاء", "group": "العملاء" }
+  ]
+}
+```
+
 `GET /api/users`
 
 `POST /api/users`
@@ -54,6 +74,8 @@ Sensitive actions additionally require matching user permissions such as `users.
   "permissions": ["properties.create", "clients.manage"]
 }
 ```
+
+If `permissions` is empty while creating or updating a non-admin user, the API applies the selected role's default permissions.
 
 Response:
 

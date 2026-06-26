@@ -226,7 +226,7 @@ const reportFilters = ref({
 const iraqiPhonePattern = /^(075|077|078|079)[0-9]{8}$/
 const nationalIdPattern = /^[A-Za-z0-9]{12,}$/
 
-const availablePermissions = [
+const defaultAvailablePermissions = [
   { key: 'properties.create', label: 'إضافة عقار' },
   { key: 'properties.update', label: 'تعديل عقار' },
   { key: 'properties.approve', label: 'قبول عقار من عميل' },
@@ -238,6 +238,17 @@ const availablePermissions = [
   { key: 'settings.update', label: 'تعديل الإعدادات' },
   { key: 'users.manage', label: 'إدارة المستخدمين' },
 ]
+
+const defaultRoleOptions = [
+  { key: 'system_admin', label: 'مدير النظام', permissions: defaultAvailablePermissions.map((permission) => permission.key) },
+  { key: 'office_manager', label: 'مدير المكتب', permissions: defaultAvailablePermissions.map((permission) => permission.key) },
+  { key: 'sales', label: 'موظف مبيعات', permissions: ['properties.create', 'properties.update', 'clients.manage', 'contracts.create', 'contracts.print'] },
+  { key: 'accountant', label: 'محاسب', permissions: ['vouchers.manage', 'reports.view'] },
+  { key: 'data_entry', label: 'مدخل بيانات', permissions: ['properties.create', 'clients.manage'] },
+  { key: 'property_supervisor', label: 'مشرف عقارات', permissions: ['properties.create', 'properties.update', 'properties.approve', 'clients.manage'] },
+]
+const availablePermissions = ref([...defaultAvailablePermissions])
+const roleOptions = ref([...defaultRoleOptions])
 
 const userForm = ref({
   name: '',
@@ -378,6 +389,7 @@ const loadApiData = async () => {
       serverNotifications,
       serverActivityLogs,
       serverSettings,
+      serverAccessControl,
     ] = await Promise.all([
       apiRequest('/properties'),
       optionalApiRequest('/clients', []),
@@ -393,6 +405,7 @@ const loadApiData = async () => {
       apiRequest('/notifications'),
       optionalApiRequest('/activity-logs', []),
       optionalApiRequest('/settings', settingsForm.value),
+      optionalApiRequest('/access-control', null),
     ])
     properties.value = serverProperties
     clients.value = serverClients
@@ -408,6 +421,19 @@ const loadApiData = async () => {
     notifications.value = serverNotifications
     activityLogs.value = serverActivityLogs
     settingsForm.value = { ...settingsForm.value, ...serverSettings }
+    if (serverAccessControl) {
+      availablePermissions.value = serverAccessControl.permissions.map((permission) => ({
+        key: permission.key,
+        label: permission.name,
+        group: permission.group,
+      }))
+      roleOptions.value = serverAccessControl.roles.map((role) => ({
+        key: role.key,
+        label: role.name,
+        description: role.description,
+        permissions: role.permissions || [],
+      }))
+    }
     if (!mediaForm.value.propertyCode && serverProperties.length > 0) {
       mediaForm.value.propertyCode = serverProperties[0].code
       await loadPropertyMedia(serverProperties[0].code)
@@ -542,8 +568,13 @@ const resetUserForm = () => {
   userForm.value.email = ''
   userForm.value.password = ''
   userForm.value.role = 'sales'
-  userForm.value.permissions = ['properties.create', 'clients.manage']
+  applyRolePermissions()
   editingUserId.value = ''
+}
+
+const applyRolePermissions = () => {
+  const selectedRole = roleOptions.value.find((role) => role.key === userForm.value.role)
+  userForm.value.permissions = [...(selectedRole?.permissions || [])]
 }
 
 const startEditUser = (user) => {
@@ -1122,7 +1153,8 @@ const visibleNotifications = computed(() => (
 ))
 
 const roleLabel = (role) =>
-  ({
+  roleOptions.value.find((option) => option.key === role)?.label
+  || ({
     system_admin: 'مدير النظام',
     office_manager: 'مدير المكتب',
     sales: 'موظف مبيعات',
@@ -2902,12 +2934,8 @@ onMounted(loadCurrentUser)
             </label>
             <label>
               <span>الدور</span>
-              <select v-model="userForm.role">
-                <option value="office_manager">مدير المكتب</option>
-                <option value="sales">موظف مبيعات</option>
-                <option value="accountant">محاسب</option>
-                <option value="data_entry">مدخل بيانات</option>
-                <option value="property_supervisor">مشرف عقارات</option>
+              <select v-model="userForm.role" @change="applyRolePermissions">
+                <option v-for="role in roleOptions" :key="role.key" :value="role.key">{{ role.label }}</option>
               </select>
             </label>
             <div class="permission-picker">

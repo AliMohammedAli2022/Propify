@@ -11,6 +11,7 @@ Route::post('/auth/logout', [PropifyController::class, 'logout']);
 Route::get('/health', [PropifyController::class, 'health']);
 Route::get('/dashboard', [PropifyController::class, 'dashboard']);
 Route::get('/users', [PropifyController::class, 'users']);
+Route::get('/access-control', [PropifyController::class, 'accessControl']);
 Route::post('/users', [PropifyController::class, 'storeUser']);
 Route::put('/users/{user}', [PropifyController::class, 'updateUser']);
 Route::delete('/users/{user}', [PropifyController::class, 'deleteUser']);

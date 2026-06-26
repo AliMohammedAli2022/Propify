@@ -7,7 +7,9 @@ use App\Models\Client;
 use App\Models\Contract;
 use App\Models\Installment;
 use App\Models\LedgerEntry;
+use App\Models\Permission;
 use App\Models\Property;
+use App\Models\Role;
 use App\Models\Voucher;
 use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
@@ -22,6 +24,51 @@ class DatabaseSeeder extends Seeder
      */
     public function run(): void
     {
+        $permissions = [
+            ['key' => 'properties.create', 'name' => 'إضافة عقار', 'group' => 'العقارات'],
+            ['key' => 'properties.update', 'name' => 'تعديل عقار', 'group' => 'العقارات'],
+            ['key' => 'properties.approve', 'name' => 'قبول عقار من عميل', 'group' => 'العقارات'],
+            ['key' => 'clients.manage', 'name' => 'إدارة العملاء', 'group' => 'العملاء'],
+            ['key' => 'contracts.create', 'name' => 'إنشاء عقد', 'group' => 'العقود'],
+            ['key' => 'contracts.print', 'name' => 'طباعة عقد', 'group' => 'العقود'],
+            ['key' => 'vouchers.manage', 'name' => 'إدارة السندات', 'group' => 'الحسابات'],
+            ['key' => 'reports.view', 'name' => 'مشاهدة التقارير', 'group' => 'التقارير'],
+            ['key' => 'settings.update', 'name' => 'تعديل الإعدادات', 'group' => 'النظام'],
+            ['key' => 'users.manage', 'name' => 'إدارة المستخدمين', 'group' => 'النظام'],
+        ];
+
+        $permissionIds = [];
+        foreach ($permissions as $permissionData) {
+            $permission = Permission::query()->create($permissionData);
+            $permissionIds[$permission->key] = $permission->id;
+        }
+
+        $allPermissions = array_keys($permissionIds);
+        $roles = [
+            ['key' => 'system_admin', 'name' => 'مدير النظام', 'description' => 'صلاحية كاملة على النظام.', 'permissions' => $allPermissions],
+            ['key' => 'office_manager', 'name' => 'مدير المكتب', 'description' => 'إدارة العمليات اليومية والتقارير والمستخدمين.', 'permissions' => $allPermissions],
+            ['key' => 'sales', 'name' => 'موظف مبيعات', 'description' => 'إدارة العملاء والعقود الأساسية.', 'permissions' => ['properties.create', 'properties.update', 'clients.manage', 'contracts.create', 'contracts.print']],
+            ['key' => 'accountant', 'name' => 'محاسب', 'description' => 'إدارة السندات والتقارير المالية.', 'permissions' => ['vouchers.manage', 'reports.view']],
+            ['key' => 'data_entry', 'name' => 'مدخل بيانات', 'description' => 'إدخال العقارات والعملاء بدون اعتماد نهائي.', 'permissions' => ['properties.create', 'clients.manage']],
+            ['key' => 'property_supervisor', 'name' => 'مشرف عقارات', 'description' => 'تعديل واعتماد بيانات العقارات.', 'permissions' => ['properties.create', 'properties.update', 'properties.approve', 'clients.manage']],
+        ];
+
+        foreach ($roles as $roleData) {
+            $role = Role::query()->create([
+                'key' => $roleData['key'],
+                'name' => $roleData['name'],
+                'description' => $roleData['description'],
+            ]);
+
+            $role->permissions()->sync(
+                collect($roleData['permissions'])
+                    ->map(fn (string $permissionKey) => $permissionIds[$permissionKey] ?? null)
+                    ->filter()
+                    ->values()
+                    ->all()
+            );
+        }
+
         AppSetting::query()->create([
             'company_name' => 'Propify',
             'company_phone' => '07700000000',
