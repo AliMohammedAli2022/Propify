@@ -1088,50 +1088,35 @@ const downloadReport = async (report, filename) => {
   }
 }
 
-const printContract = (contract) => {
+const printDocument = async (path) => {
   const printWindow = window.open('', '_blank', 'width=900,height=700')
   if (!printWindow) return
 
-  printWindow.document.write(`
-    <html lang="ar" dir="rtl">
-      <head>
-        <title>${contract.code}</title>
-        <style>
-          body { font-family: Tahoma, Arial, sans-serif; padding: 32px; color: #111827; }
-          header { border-bottom: 2px solid #147d73; margin-bottom: 24px; padding-bottom: 12px; }
-          h1 { margin: 0 0 8px; }
-          table { width: 100%; border-collapse: collapse; margin-top: 18px; }
-          td { border: 1px solid #d1d5db; padding: 10px; }
-          .signatures { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; margin-top: 80px; text-align: center; }
-          .signatures div { border-top: 1px solid #111827; padding-top: 8px; }
-        </style>
-      </head>
-      <body>
-        <header>
-          <h1>Propify</h1>
-          <strong>عقد ${contract.kind} رقم ${contract.code}</strong>
-        </header>
-        <table>
-          <tr><td>رقم العقار</td><td>${contract.propertyCode || '-'}</td></tr>
-          <tr><td>العميل</td><td>${contract.client}</td></tr>
-          <tr><td>قيمة العقد</td><td>${formatMoney(contract.total)} دينار</td></tr>
-          <tr><td>المدفوع</td><td>${formatMoney(contract.paid)} دينار</td></tr>
-          <tr><td>المتبقي</td><td>${formatMoney(contract.due)} دينار</td></tr>
-          <tr><td>عمولة المكتب</td><td>${formatMoney(contract.commission)} دينار</td></tr>
-          <tr><td>الحالة</td><td>${contract.status}</td></tr>
-        </table>
-        <div class="signatures">
-          <div>توقيع الطرف الأول</div>
-          <div>توقيع الطرف الثاني</div>
-          <div>ختم المكتب</div>
-        </div>
-      </body>
-    </html>
-  `)
-  printWindow.document.close()
-  printWindow.focus()
-  printWindow.print()
+  printWindow.document.write('<p style="font-family: Tahoma, Arial; direction: rtl; padding: 24px;">جاري تجهيز المستند...</p>')
+
+  try {
+    const response = await fetch(`${API_BASE_URL}${path}`, {
+      headers: {
+        ...(authToken.value ? { Authorization: `Bearer ${authToken.value}` } : {}),
+      },
+    })
+    if (!response.ok) throw new Error('Print document failed')
+
+    printWindow.document.open()
+    printWindow.document.write(await response.text())
+    printWindow.document.close()
+    printWindow.focus()
+    apiOnline.value = true
+  } catch {
+    printWindow.close()
+    apiOnline.value = false
+    showSuccess('تعذر تجهيز مستند الطباعة من API.')
+  }
 }
+
+const printContract = (contract) => printDocument(`/contracts/${contract.code}/print`)
+
+const printVoucher = (voucher) => printDocument(`/vouchers/${voucher.code}/print`)
 
 const formatMoney = (value) => Number(value || 0).toLocaleString('en-US')
 
@@ -1674,6 +1659,9 @@ onMounted(loadCurrentUser)
               </div>
               <div class="row-actions">
                 <small>{{ formatMoney(voucher.amount) }}</small>
+                <button class="mini-button" type="button" title="طباعة السند" @click="printVoucher(voucher)">
+                  <Printer :size="17" />
+                </button>
                 <button class="mini-button" type="button" title="تعديل السند" @click="startEditVoucher(voucher)">ت</button>
                 <button class="mini-button danger-action" type="button" title="حذف السند" @click="deleteVoucher(voucher)">×</button>
               </div>

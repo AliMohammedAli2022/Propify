@@ -409,6 +409,54 @@ class PropifyController extends Controller
         return $this->json(['ok' => true]);
     }
 
+    public function printContract(Contract $contract)
+    {
+        $property = Property::where('code', $contract->property_code)->first();
+        $installments = Installment::where('contract_code', $contract->code)->orderBy('number')->get();
+
+        $rows = [
+            ['رقم العقد', $contract->code],
+            ['نوع العقد', $contract->kind],
+            ['رقم العقار', $contract->property_code ?: '-'],
+            ['العميل', $contract->client],
+            ['قيمة العقد', number_format((float) $contract->total).' دينار'],
+            ['المدفوع', number_format((float) $contract->paid).' دينار'],
+            ['المتبقي', number_format((float) $contract->due).' دينار'],
+            ['عمولة المكتب', number_format((float) $contract->commission).' دينار'],
+            ['الحالة', $contract->status],
+            ['تاريخ الإصدار', now()->format('Y-m-d')],
+        ];
+
+        if ($property) {
+            $rows[] = ['موقع العقار', "{$property->province} / {$property->area}"];
+            $rows[] = ['نوع العقار', $property->type];
+            $rows[] = ['المساحة', number_format((float) $property->space).' م2'];
+        }
+
+        $installmentRows = $installments->map(fn (Installment $installment) => sprintf(
+            '<tr><td>%s</td><td>%s</td><td>%s</td><td>%s</td><td>%s</td></tr>',
+            e($installment->number),
+            e($installment->due_date->format('Y-m-d')),
+            e(number_format((float) $installment->amount)),
+            e(number_format((float) $installment->paid_amount)),
+            e($installment->status),
+        ))->implode('');
+
+        $schedule = $installments->isEmpty() ? '' : '
+            <section>
+                <h2>جدول الأقساط</h2>
+                <table>
+                    <thead><tr><th>القسط</th><th>الاستحقاق</th><th>المبلغ</th><th>المدفوع</th><th>الحالة</th></tr></thead>
+                    <tbody>'.$installmentRows.'</tbody>
+                </table>
+            </section>';
+
+        return $this->documentResponse(
+            "عقد {$contract->kind} {$contract->code}",
+            $this->documentTable($rows).$schedule.$this->signatureBlock(['الطرف الأول', 'الطرف الثاني', 'ختم المكتب'])
+        );
+    }
+
     public function installments(Request $request): JsonResponse
     {
         $query = Installment::query()->orderBy('due_date');
@@ -532,6 +580,25 @@ class PropifyController extends Controller
         $voucher->delete();
 
         return $this->json(['ok' => true]);
+    }
+
+    public function printVoucher(Voucher $voucher)
+    {
+        $rows = [
+            ['رقم السند', $voucher->code],
+            ['نوع السند', $voucher->type],
+            ['الطرف', $voucher->client],
+            ['المبلغ', number_format((float) $voucher->amount).' دينار'],
+            ['السبب', $voucher->reason],
+            ['العقار', $voucher->property_code ?: '-'],
+            ['العقد', $voucher->contract_code ?: '-'],
+            ['تاريخ السند', $voucher->issued_at->format('Y-m-d')],
+        ];
+
+        return $this->documentResponse(
+            "سند {$voucher->type} {$voucher->code}",
+            $this->documentTable($rows).$this->signatureBlock(['المحاسب', 'المستلم / الدافع', 'ختم المكتب'])
+        );
     }
 
     public function ledger(): JsonResponse
@@ -749,6 +816,69 @@ class PropifyController extends Controller
             'Content-Disposition' => "attachment; filename=\"{$filename}\"",
             'Access-Control-Allow-Origin' => '*',
         ]);
+    }
+
+    private function documentResponse(string $title, string $body)
+    {
+        $safeTitle = e($title);
+        $printedAt = now()->format('Y-m-d H:i');
+        $html = <<<HTML
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="utf-8">
+    <title>{$safeTitle}</title>
+    <style>
+        body { font-family: Tahoma, Arial, sans-serif; color: #111827; margin: 0; padding: 32px; background: #fff; }
+        header { border-bottom: 3px solid #147d73; padding-bottom: 14px; margin-bottom: 24px; display: flex; justify-content: space-between; gap: 24px; }
+        h1 { margin: 0 0 8px; font-size: 26px; }
+        h2 { margin: 28px 0 12px; font-size: 18px; }
+        .meta { color: #64748b; font-size: 13px; }
+        table { width: 100%; border-collapse: collapse; margin-top: 14px; }
+        th, td { border: 1px solid #d1d5db; padding: 10px 12px; text-align: right; }
+        th { background: #f3f4f6; }
+        td:first-child { width: 32%; background: #f8fafc; font-weight: 700; }
+        .signatures { display: grid; grid-template-columns: repeat(3, 1fr); gap: 22px; margin-top: 86px; text-align: center; }
+        .signatures div { border-top: 1px solid #111827; padding-top: 10px; min-height: 32px; }
+        @media print { body { padding: 20px; } button { display: none; } }
+    </style>
+</head>
+<body>
+    <header>
+        <div>
+            <h1>Propify</h1>
+            <strong>{$safeTitle}</strong>
+        </div>
+        <div class="meta">تاريخ الطباعة: {$printedAt}</div>
+    </header>
+    {$body}
+    <script>window.addEventListener('load', () => window.print())</script>
+</body>
+</html>
+HTML;
+
+        return response($html, 200)->withHeaders([
+            'Content-Type' => 'text/html; charset=UTF-8',
+            'Access-Control-Allow-Origin' => '*',
+        ]);
+    }
+
+    private function documentTable(array $rows): string
+    {
+        $htmlRows = collect($rows)->map(fn (array $row) => sprintf(
+            '<tr><td>%s</td><td>%s</td></tr>',
+            e($row[0]),
+            e($row[1]),
+        ))->implode('');
+
+        return "<table><tbody>{$htmlRows}</tbody></table>";
+    }
+
+    private function signatureBlock(array $labels): string
+    {
+        $items = collect($labels)->map(fn (string $label) => '<div>'.e($label).'</div>')->implode('');
+
+        return "<div class=\"signatures\">{$items}</div>";
     }
 
     private function json(mixed $data, int $status = 200): JsonResponse

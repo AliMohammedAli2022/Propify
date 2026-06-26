@@ -157,6 +157,10 @@ Validation:
 
 `DELETE /api/contracts/{code}`
 
+`GET /api/contracts/{code}/print`
+
+Returns printable RTL HTML for the contract and its installment schedule.
+
 ```json
 {
   "property_id": 1,
@@ -187,6 +191,10 @@ Expected behavior:
 `PUT /api/vouchers/{code}`
 
 `DELETE /api/vouchers/{code}`
+
+`GET /api/vouchers/{code}/print`
+
+Returns printable RTL HTML for a receipt/payment voucher.
 
 ```json
 {
