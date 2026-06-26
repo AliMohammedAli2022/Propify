@@ -208,6 +208,25 @@ Response:
 
 يعيد قيود الدفتر المالي المبسط الناتجة من السندات.
 
+## Notifications
+
+`GET /api/notifications`
+
+Returns generated operational alerts from due installments, pending properties, open contract balances, and recent vouchers.
+
+Response item:
+
+```json
+{
+  "id": "installment-CT-2026-000045-1",
+  "type": "installment",
+  "severity": "warning",
+  "title": "قسط قريب الاستحقاق",
+  "message": "القسط 1 للعقد CT-2026-000045 يستحق في 2026-07-01.",
+  "createdAt": "2026-06-26 12:00:00"
+}
+```
+
 ## Reports
 
 - `GET /api/reports/properties`

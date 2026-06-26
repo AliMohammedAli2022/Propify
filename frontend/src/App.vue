@@ -142,6 +142,7 @@ const users = ref([])
 const financialReport = ref(null)
 const propertiesReport = ref(null)
 const installmentsReport = ref(null)
+const notifications = ref([])
 const propertyMedia = ref([])
 const mediaErrors = ref({})
 const mediaForm = ref({
@@ -277,6 +278,7 @@ const loadApiData = async () => {
       serverFinancialReport,
       serverPropertiesReport,
       serverInstallmentsReport,
+      serverNotifications,
     ] = await Promise.all([
       apiRequest('/properties'),
       apiRequest('/clients'),
@@ -288,6 +290,7 @@ const loadApiData = async () => {
       apiRequest('/reports/financial'),
       apiRequest('/reports/properties'),
       apiRequest('/reports/installments'),
+      apiRequest('/notifications'),
     ])
     properties.value = serverProperties
     clients.value = serverClients
@@ -299,6 +302,7 @@ const loadApiData = async () => {
     financialReport.value = serverFinancialReport
     propertiesReport.value = serverPropertiesReport
     installmentsReport.value = serverInstallmentsReport
+    notifications.value = serverNotifications
     if (!mediaForm.value.propertyCode && serverProperties.length > 0) {
       mediaForm.value.propertyCode = serverProperties[0].code
       await loadPropertyMedia(serverProperties[0].code)
@@ -628,12 +632,30 @@ const addVoucher = () => {
   voucherForm.value.contractCode = ''
 }
 
-const notifications = [
-  'قسط مستحق اليوم للعقد CT-2026-000045',
-  'عقار جديد بانتظار الموافقة PR-2026-000147',
-  'موعد معاينة غداً الساعة 10:30 صباحاً',
-  'سند قبض جديد بقيمة 2,000,000 دينار',
-]
+const fallbackNotifications = computed(() => [
+  ...installments.value
+    .filter((installment) => installment.status === 'مستحق')
+    .slice(0, 3)
+    .map((installment) => ({
+      id: `local-installment-${installment.contractCode}-${installment.number}`,
+      severity: 'warning',
+      title: 'قسط مستحق',
+      message: `القسط ${installment.number} للعقد ${installment.contractCode} يستحق في ${installment.dueDate}.`,
+    })),
+  ...properties.value
+    .filter((property) => property.status === 'قيد المراجعة')
+    .slice(0, 2)
+    .map((property) => ({
+      id: `local-property-${property.code}`,
+      severity: 'info',
+      title: 'عقار بانتظار المراجعة',
+      message: `العقار ${property.code} يحتاج مراجعة قبل الاعتماد.`,
+    })),
+])
+
+const visibleNotifications = computed(() => (
+  notifications.value.length > 0 ? notifications.value : fallbackNotifications.value
+))
 
 const roleLabel = (role) =>
   ({
@@ -1211,7 +1233,14 @@ onMounted(loadCurrentUser)
             <Bell :size="22" />
           </div>
           <div class="notification-list">
-            <p v-for="notification in notifications" :key="notification">{{ notification }}</p>
+            <p v-for="notification in visibleNotifications" :key="notification.id" :class="notification.severity">
+              <strong>{{ notification.title }}</strong>
+              <span>{{ notification.message }}</span>
+            </p>
+            <p v-if="visibleNotifications.length === 0" class="info">
+              <strong>لا توجد تنبيهات</strong>
+              <span>كل شيء مستقر حاليا.</span>
+            </p>
           </div>
         </article>
 

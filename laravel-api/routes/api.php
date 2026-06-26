@@ -24,6 +24,7 @@ Route::get('/installments', [PropifyController::class, 'installments']);
 Route::get('/vouchers', [PropifyController::class, 'vouchers']);
 Route::post('/vouchers', [PropifyController::class, 'storeVoucher']);
 Route::get('/ledger', [PropifyController::class, 'ledger']);
+Route::get('/notifications', [PropifyController::class, 'notifications']);
 Route::get('/reports/financial', [PropifyController::class, 'financialReport']);
 Route::get('/reports/properties', [PropifyController::class, 'propertiesReport']);
 Route::get('/reports/installments', [PropifyController::class, 'installmentsReport']);

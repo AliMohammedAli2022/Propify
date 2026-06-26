@@ -382,6 +382,75 @@ class PropifyController extends Controller
         );
     }
 
+    public function notifications(): JsonResponse
+    {
+        $dueInstallments = Installment::query()
+            ->whereDate('due_date', '<=', Carbon::now()->addDays(7)->toDateString())
+            ->where('status', '!=', 'مدفوع')
+            ->orderBy('due_date')
+            ->limit(6)
+            ->get()
+            ->map(fn (Installment $installment) => [
+                'id' => "installment-{$installment->contract_code}-{$installment->number}",
+                'type' => 'installment',
+                'severity' => $installment->due_date->isPast() ? 'danger' : 'warning',
+                'title' => 'قسط قريب الاستحقاق',
+                'message' => "القسط {$installment->number} للعقد {$installment->contract_code} يستحق في {$installment->due_date->format('Y-m-d')}.",
+                'createdAt' => $installment->updated_at?->toDateTimeString(),
+            ]);
+
+        $pendingProperties = Property::query()
+            ->where('status', 'قيد المراجعة')
+            ->latest()
+            ->limit(4)
+            ->get()
+            ->map(fn (Property $property) => [
+                'id' => "property-{$property->code}",
+                'type' => 'property',
+                'severity' => 'info',
+                'title' => 'عقار بانتظار المراجعة',
+                'message' => "العقار {$property->code} في {$property->area} يحتاج مراجعة قبل الاعتماد.",
+                'createdAt' => $property->updated_at?->toDateTimeString(),
+            ]);
+
+        $openContracts = Contract::query()
+            ->where('due', '>', 0)
+            ->latest()
+            ->limit(4)
+            ->get()
+            ->map(fn (Contract $contract) => [
+                'id' => "contract-{$contract->code}",
+                'type' => 'contract',
+                'severity' => 'warning',
+                'title' => 'مبلغ متبق على عقد',
+                'message' => "العقد {$contract->code} لديه متبق قدره ".number_format((float) $contract->due).' دينار.',
+                'createdAt' => $contract->updated_at?->toDateTimeString(),
+            ]);
+
+        $recentVouchers = Voucher::query()
+            ->latest()
+            ->limit(3)
+            ->get()
+            ->map(fn (Voucher $voucher) => [
+                'id' => "voucher-{$voucher->code}",
+                'type' => 'voucher',
+                'severity' => $voucher->type === 'قبض' ? 'success' : 'info',
+                'title' => "سند {$voucher->type} جديد",
+                'message' => "تم تسجيل {$voucher->code} بقيمة ".number_format((float) $voucher->amount).' دينار.',
+                'createdAt' => $voucher->created_at?->toDateTimeString(),
+            ]);
+
+        return $this->json(
+            $dueInstallments
+                ->merge($pendingProperties)
+                ->merge($openContracts)
+                ->merge($recentVouchers)
+                ->sortByDesc('createdAt')
+                ->take(12)
+                ->values()
+        );
+    }
+
     public function financialReport(Request $request): JsonResponse
     {
         $ledgerQuery = LedgerEntry::query();

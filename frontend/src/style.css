@@ -660,10 +660,33 @@ th {
 
 .notification-list p {
   margin: 0;
+  display: grid;
+  gap: 4px;
   padding: 12px;
   border-right: 3px solid var(--accent);
   border-radius: var(--radius);
   background: var(--surface-2);
+}
+
+.notification-list p.warning {
+  border-right-color: var(--warning);
+}
+
+.notification-list p.danger {
+  border-right-color: var(--danger);
+}
+
+.notification-list p.success {
+  border-right-color: var(--success);
+}
+
+.notification-list p.info {
+  border-right-color: var(--info);
+}
+
+.notification-list span {
+  color: var(--muted);
+  font-size: 0.88rem;
 }
 
 .money {
