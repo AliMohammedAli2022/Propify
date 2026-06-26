@@ -51,6 +51,9 @@ const installmentPageSize = 5
 const activitySort = ref({ key: 'createdAt', direction: 'desc' })
 const activityPage = ref(1)
 const activityPageSize = 6
+const userSort = ref({ key: 'name', direction: 'asc' })
+const userPage = ref(1)
+const userPageSize = 6
 const apiOnline = ref(false)
 const authToken = ref(localStorage.getItem('propify.authToken') || '')
 const currentUser = ref(null)
@@ -1478,6 +1481,63 @@ const previousActivityPage = () => {
   activityPage.value = Math.max(activityPage.value - 1, 1)
 }
 
+const filteredUsers = computed(() => {
+  const query = searchQuery.value.trim().toLowerCase()
+
+  return users.value.filter((user) => {
+    const searchable = [
+      user.name,
+      user.email,
+      roleLabel(user.role),
+      user.role,
+      ...(user.permissions || []),
+    ]
+      .join(' ')
+      .toLowerCase()
+
+    return !query || searchable.includes(query)
+  })
+})
+
+const sortedUsers = computed(() => {
+  const sorted = [...filteredUsers.value]
+  const { key, direction } = userSort.value
+
+  return sorted.sort((a, b) => {
+    const first = key === 'permissions' ? (a.permissions || []).length : a[key]
+    const second = key === 'permissions' ? (b.permissions || []).length : b[key]
+
+    return compareValues(first, second, direction)
+  })
+})
+
+const userPageCount = computed(() => Math.max(1, Math.ceil(sortedUsers.value.length / userPageSize)))
+const paginatedUsers = computed(() => {
+  const start = (userPage.value - 1) * userPageSize
+  return sortedUsers.value.slice(start, start + userPageSize)
+})
+
+const sortUsers = (key) => {
+  userSort.value = {
+    key,
+    direction: userSort.value.key === key && userSort.value.direction === 'asc' ? 'desc' : 'asc',
+  }
+  userPage.value = 1
+}
+
+const userSortLabel = (key) => {
+  if (userSort.value.key !== key) return ''
+  return userSort.value.direction === 'asc' ? '↑' : '↓'
+}
+
+const nextUserPage = () => {
+  userPage.value = Math.min(userPage.value + 1, userPageCount.value)
+}
+
+const previousUserPage = () => {
+  userPage.value = Math.max(userPage.value - 1, 1)
+}
+
 const downloadFile = (filename, content, type = 'text/csv;charset=utf-8', withBom = true) => {
   const blob = new Blob([withBom ? '\ufeff' : '', content], { type })
   const url = URL.createObjectURL(blob)
@@ -1624,6 +1684,7 @@ watch([searchQuery, statusFilter], () => {
   voucherPage.value = 1
   installmentPage.value = 1
   activityPage.value = 1
+  userPage.value = 1
 })
 
 watch(propertyPageCount, (pageCount) => {
@@ -1648,6 +1709,10 @@ watch(installmentPageCount, (pageCount) => {
 
 watch(activityPageCount, (pageCount) => {
   activityPage.value = Math.min(activityPage.value, pageCount)
+})
+
+watch(userPageCount, (pageCount) => {
+  userPage.value = Math.min(userPage.value, pageCount)
 })
 
 const statusClass = (status) =>
@@ -2419,7 +2484,10 @@ onMounted(loadCurrentUser)
               <p class="eyebrow">الصلاحيات</p>
               <h2>المستخدمون والأدوار</h2>
             </div>
-            <ShieldCheck :size="22" />
+            <div class="panel-actions">
+              <button class="ghost-button" type="button" @click="sortUsers('name')">الاسم {{ userSortLabel('name') }}</button>
+              <button class="ghost-button" type="button" @click="sortUsers('role')">الدور {{ userSortLabel('role') }}</button>
+            </div>
           </div>
           <form class="smart-form user-form" @submit.prevent="addUser">
             <label>
@@ -2457,7 +2525,7 @@ onMounted(loadCurrentUser)
             <button v-if="editingUserId" class="text-button ghost-button" type="button" @click="resetUserForm">إلغاء التعديل</button>
           </form>
           <div class="stack-list users-list">
-            <div v-for="user in users" :key="user.email" class="list-row">
+            <div v-for="user in paginatedUsers" :key="user.email" class="list-row">
               <div>
                 <strong>{{ user.name }}</strong>
                 <span>{{ user.email }} · {{ roleLabel(user.role) }}</span>
@@ -2467,6 +2535,19 @@ onMounted(loadCurrentUser)
                 <button class="mini-button" type="button" title="تعديل المستخدم" @click="startEditUser(user)">ت</button>
                 <button class="mini-button danger-action" type="button" title="حذف المستخدم" @click="deleteUser(user)">×</button>
               </div>
+            </div>
+            <p v-if="sortedUsers.length === 0" class="empty-note">لا يوجد مستخدمون مطابقون للبحث الحالي.</p>
+          </div>
+          <div class="pagination-bar">
+            <span>عرض {{ paginatedUsers.length }} من {{ sortedUsers.length }} مستخدم</span>
+            <div class="row-actions">
+              <button class="mini-button" type="button" :disabled="userPage === 1" @click="previousUserPage">
+                <ChevronRight :size="17" />
+              </button>
+              <span>{{ userPage }} / {{ userPageCount }}</span>
+              <button class="mini-button" type="button" :disabled="userPage === userPageCount" @click="nextUserPage">
+                <ChevronLeft :size="17" />
+              </button>
             </div>
           </div>
         </article>
