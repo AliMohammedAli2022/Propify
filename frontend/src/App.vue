@@ -36,6 +36,9 @@ const statusFilter = ref('الكل')
 const propertySort = ref({ key: 'code', direction: 'desc' })
 const propertyPage = ref(1)
 const propertyPageSize = 8
+const clientSort = ref({ key: 'name', direction: 'asc' })
+const clientPage = ref(1)
+const clientPageSize = 6
 const apiOnline = ref(false)
 const authToken = ref(localStorage.getItem('propify.authToken') || '')
 const currentUser = ref(null)
@@ -1137,20 +1140,25 @@ const filteredProperties = computed(() => {
   })
 })
 
+const compareValues = (first, second, direction = 'asc', locale = 'ar') => {
+  const multiplier = direction === 'asc' ? 1 : -1
+
+  if (typeof first === 'number' && typeof second === 'number') {
+    return (first - second) * multiplier
+  }
+
+  return String(first ?? '').localeCompare(String(second ?? ''), locale) * multiplier
+}
+
 const sortedProperties = computed(() => {
   const sorted = [...filteredProperties.value]
   const { key, direction } = propertySort.value
-  const multiplier = direction === 'asc' ? 1 : -1
 
   return sorted.sort((a, b) => {
     const first = key === 'price' ? Number(String(a[key] || 0).replaceAll(',', '')) : String(a[key] ?? '')
     const second = key === 'price' ? Number(String(b[key] || 0).replaceAll(',', '')) : String(b[key] ?? '')
 
-    if (typeof first === 'number' && typeof second === 'number') {
-      return (first - second) * multiplier
-    }
-
-    return first.localeCompare(second, 'ar') * multiplier
+    return compareValues(first, second, direction)
   })
 })
 
@@ -1179,6 +1187,52 @@ const nextPropertyPage = () => {
 
 const previousPropertyPage = () => {
   propertyPage.value = Math.max(propertyPage.value - 1, 1)
+}
+
+const filteredClients = computed(() => {
+  const query = searchQuery.value.trim().toLowerCase()
+
+  return clients.value.filter((client) => {
+    const searchable = [client.name, client.role, client.phone, client.stage, client.source]
+      .join(' ')
+      .toLowerCase()
+
+    return !query || searchable.includes(query)
+  })
+})
+
+const sortedClients = computed(() => {
+  const sorted = [...filteredClients.value]
+  const { key, direction } = clientSort.value
+
+  return sorted.sort((a, b) => compareValues(a[key], b[key], direction))
+})
+
+const clientPageCount = computed(() => Math.max(1, Math.ceil(sortedClients.value.length / clientPageSize)))
+const paginatedClients = computed(() => {
+  const start = (clientPage.value - 1) * clientPageSize
+  return sortedClients.value.slice(start, start + clientPageSize)
+})
+
+const sortClients = (key) => {
+  clientSort.value = {
+    key,
+    direction: clientSort.value.key === key && clientSort.value.direction === 'asc' ? 'desc' : 'asc',
+  }
+  clientPage.value = 1
+}
+
+const clientSortLabel = (key) => {
+  if (clientSort.value.key !== key) return ''
+  return clientSort.value.direction === 'asc' ? '↑' : '↓'
+}
+
+const nextClientPage = () => {
+  clientPage.value = Math.min(clientPage.value + 1, clientPageCount.value)
+}
+
+const previousClientPage = () => {
+  clientPage.value = Math.max(clientPage.value - 1, 1)
 }
 
 const downloadFile = (filename, content, type = 'text/csv;charset=utf-8', withBom = true) => {
@@ -1322,10 +1376,15 @@ watch(
 
 watch([searchQuery, statusFilter], () => {
   propertyPage.value = 1
+  clientPage.value = 1
 })
 
 watch(propertyPageCount, (pageCount) => {
   propertyPage.value = Math.min(propertyPage.value, pageCount)
+})
+
+watch(clientPageCount, (pageCount) => {
+  clientPage.value = Math.min(clientPage.value, pageCount)
 })
 
 const statusClass = (status) =>
@@ -1747,10 +1806,13 @@ onMounted(loadCurrentUser)
               <p class="eyebrow">CRM</p>
               <h2>متابعة العملاء</h2>
             </div>
-            <Users :size="22" />
+            <div class="panel-actions">
+              <button class="text-button ghost-button" type="button" @click="sortClients('name')">الاسم {{ clientSortLabel('name') }}</button>
+              <button class="text-button ghost-button" type="button" @click="sortClients('stage')">المرحلة {{ clientSortLabel('stage') }}</button>
+            </div>
           </div>
           <div class="stack-list">
-            <div v-for="client in clients" :key="client.phone" class="list-row">
+            <div v-for="client in paginatedClients" :key="client.phone" class="list-row">
               <div>
                 <strong>{{ client.name }}</strong>
                 <span>{{ client.role }} · {{ client.source }}</span>
@@ -1760,6 +1822,19 @@ onMounted(loadCurrentUser)
                 <button class="mini-button" type="button" title="تعديل" @click="startEditClient(client)">ت</button>
                 <button class="mini-button danger-action" type="button" title="حذف" @click="deleteClient(client)">×</button>
               </div>
+            </div>
+            <p v-if="filteredClients.length === 0" class="empty-note">لا توجد نتائج عملاء مطابقة للبحث الحالي.</p>
+          </div>
+          <div class="pagination-bar">
+            <span>عرض {{ paginatedClients.length }} من {{ filteredClients.length }} عميل</span>
+            <div class="row-actions">
+              <button class="mini-button" type="button" :disabled="clientPage === 1" @click="previousClientPage">
+                <ChevronRight :size="17" />
+              </button>
+              <small>صفحة {{ clientPage }} / {{ clientPageCount }}</small>
+              <button class="mini-button" type="button" :disabled="clientPage === clientPageCount" @click="nextClientPage">
+                <ChevronLeft :size="17" />
+              </button>
             </div>
           </div>
         </article>
