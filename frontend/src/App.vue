@@ -57,6 +57,25 @@ const navItems = [
   { id: 'settings', label: 'الإعدادات', icon: Settings },
 ]
 
+const sectionPermissions = {
+  properties: ['properties.create', 'properties.update', 'properties.approve'],
+  clients: ['clients.manage'],
+  contracts: ['contracts.create', 'contracts.print'],
+  finance: ['vouchers.manage'],
+  reports: ['reports.view'],
+  permissions: ['users.manage'],
+  settings: ['settings.update'],
+}
+
+const hasPermission = (permission) => (
+  !permission
+  || currentUser.value?.role === 'system_admin'
+  || currentUser.value?.permissions?.includes(permission)
+)
+
+const hasAnyPermission = (permissions = []) => permissions.length === 0 || permissions.some((permission) => hasPermission(permission))
+const canSeeSection = (section) => section === 'dashboard' || hasAnyPermission(sectionPermissions[section] || [])
+const visibleNavItems = computed(() => navItems.filter((item) => canSeeSection(item.id)))
 const activeSectionLabel = computed(() => navItems.find((item) => item.id === activeSection.value)?.label || 'Propify')
 const showSection = (...sections) => sections.includes(activeSection.value)
 
@@ -214,9 +233,19 @@ const apiRequest = async (path, options = {}) => {
   if (!response.ok) {
     const error = new Error(data.message || 'API request failed')
     error.errors = data.errors || {}
+    error.status = response.status
     throw error
   }
   return data
+}
+
+const optionalApiRequest = async (path, fallback) => {
+  try {
+    return await apiRequest(path)
+  } catch (error) {
+    if (error.status === 403) return fallback
+    throw error
+  }
 }
 
 const apiUpload = async (path, formData) => {
@@ -297,17 +326,17 @@ const loadApiData = async () => {
       serverSettings,
     ] = await Promise.all([
       apiRequest('/properties'),
-      apiRequest('/clients'),
+      optionalApiRequest('/clients', []),
       apiRequest('/contracts'),
       apiRequest('/installments'),
-      apiRequest('/vouchers'),
-      apiRequest('/ledger'),
-      apiRequest('/users'),
-      apiRequest('/reports/financial'),
-      apiRequest('/reports/properties'),
-      apiRequest('/reports/installments'),
+      optionalApiRequest('/vouchers', []),
+      optionalApiRequest('/ledger', []),
+      optionalApiRequest('/users', []),
+      optionalApiRequest('/reports/financial', null),
+      optionalApiRequest('/reports/properties', null),
+      optionalApiRequest('/reports/installments', null),
       apiRequest('/notifications'),
-      apiRequest('/settings'),
+      optionalApiRequest('/settings', settingsForm.value),
     ])
     properties.value = serverProperties
     clients.value = serverClients
@@ -1223,7 +1252,7 @@ onMounted(loadCurrentUser)
 
       <nav aria-label="أقسام النظام">
         <button
-          v-for="item in navItems"
+          v-for="item in visibleNavItems"
           :key="item.id"
           class="nav-item"
           :class="{ active: activeSection === item.id }"
@@ -1288,7 +1317,7 @@ onMounted(loadCurrentUser)
       </section>
 
       <section v-if="showSection('properties', 'clients', 'contracts')" class="operations-grid">
-        <article v-if="showSection('properties')" class="panel form-panel">
+        <article v-if="showSection('properties') && hasPermission('properties.create')" class="panel form-panel">
           <div class="panel-header">
             <div>
               <p class="eyebrow">إدارة العقارات</p>
@@ -1412,7 +1441,7 @@ onMounted(loadCurrentUser)
           </form>
         </article>
 
-        <article v-if="showSection('properties')" class="panel form-panel wide-operation">
+        <article v-if="showSection('properties') && hasPermission('properties.update')" class="panel form-panel wide-operation">
           <div class="panel-header">
             <div>
               <p class="eyebrow">ملفات العقار</p>
@@ -1446,7 +1475,7 @@ onMounted(loadCurrentUser)
           </div>
         </article>
 
-        <article v-if="showSection('contracts')" class="panel form-panel wide-operation">
+        <article v-if="showSection('contracts') && hasPermission('contracts.create')" class="panel form-panel wide-operation">
           <div class="panel-header">
             <div>
               <p class="eyebrow">العقود والتقسيط</p>
@@ -1553,9 +1582,9 @@ onMounted(loadCurrentUser)
                   <td>{{ property.owner }}</td>
                   <td>
                     <div class="row-actions">
-                      <button class="mini-button" type="button" title="تعديل" @click="startEditProperty(property)">ت</button>
-                      <button class="mini-button" type="button" title="اعتماد" @click="approveProperty(property)">✓</button>
-                      <button class="mini-button danger-action" type="button" title="حذف" @click="deleteProperty(property)">×</button>
+                      <button v-if="hasPermission('properties.update')" class="mini-button" type="button" title="تعديل" @click="startEditProperty(property)">ت</button>
+                      <button v-if="hasPermission('properties.approve')" class="mini-button" type="button" title="اعتماد" @click="approveProperty(property)">✓</button>
+                      <button v-if="hasPermission('properties.update')" class="mini-button danger-action" type="button" title="حذف" @click="deleteProperty(property)">×</button>
                     </div>
                   </td>
                 </tr>
@@ -1567,7 +1596,7 @@ onMounted(loadCurrentUser)
           </div>
         </article>
 
-        <article v-if="showSection('dashboard', 'clients')" class="panel">
+        <article v-if="showSection('dashboard', 'clients') && hasPermission('clients.manage')" class="panel">
           <div class="panel-header">
             <div>
               <p class="eyebrow">CRM</p>
@@ -1630,11 +1659,11 @@ onMounted(loadCurrentUser)
                 <span>متبقي {{ formatMoney(contract.due) }}</span>
               </div>
               <span class="badge" :class="statusClass(contract.status)">{{ contract.status }}</span>
-              <button class="mini-button" type="button" title="طباعة العقد" @click="printContract(contract)">
-                <Printer :size="17" />
-              </button>
-              <button class="mini-button" type="button" title="تعديل العقد" @click="startEditContract(contract)">ت</button>
-              <button class="mini-button danger-action" type="button" title="حذف العقد" @click="deleteContract(contract)">×</button>
+                <button v-if="hasPermission('contracts.print')" class="mini-button" type="button" title="طباعة العقد" @click="printContract(contract)">
+                  <Printer :size="17" />
+                </button>
+              <button v-if="hasPermission('contracts.create')" class="mini-button" type="button" title="تعديل العقد" @click="startEditContract(contract)">ت</button>
+              <button v-if="hasPermission('contracts.create')" class="mini-button danger-action" type="button" title="حذف العقد" @click="deleteContract(contract)">×</button>
             </div>
           </div>
         </article>
@@ -1699,7 +1728,7 @@ onMounted(loadCurrentUser)
           </div>
         </article>
 
-        <article v-if="showSection('dashboard', 'finance')" class="panel">
+        <article v-if="showSection('dashboard', 'finance') && hasPermission('vouchers.manage')" class="panel">
           <div class="panel-header">
             <div>
               <p class="eyebrow">Ledger</p>
@@ -1731,6 +1760,7 @@ onMounted(loadCurrentUser)
               <div class="row-actions">
                 <small>{{ formatMoney(installment.amount) }} · {{ installment.status }}</small>
                 <button
+                  v-if="hasPermission('vouchers.manage')"
                   class="mini-button"
                   type="button"
                   title="تسديد القسط"
@@ -1744,7 +1774,7 @@ onMounted(loadCurrentUser)
           </div>
         </article>
 
-        <article v-if="showSection('dashboard', 'reports')" class="panel">
+        <article v-if="showSection('dashboard', 'reports') && hasPermission('reports.view')" class="panel">
           <div class="panel-header">
             <div>
               <p class="eyebrow">التقارير</p>

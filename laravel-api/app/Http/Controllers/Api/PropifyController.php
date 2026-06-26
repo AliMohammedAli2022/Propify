@@ -87,8 +87,12 @@ class PropifyController extends Controller
         return $this->json(['ok' => true]);
     }
 
-    public function dashboard(): JsonResponse
+    public function dashboard(Request $request): JsonResponse
     {
+        if ($guard = $this->guard($request)) {
+            return $guard;
+        }
+
         return $this->json([
             'properties_total' => Property::count(),
             'properties_available' => Property::where('status', 'متاح')->count(),
@@ -104,6 +108,10 @@ class PropifyController extends Controller
 
     public function users(Request $request): JsonResponse
     {
+        if ($guard = $this->guard($request, 'users.manage')) {
+            return $guard;
+        }
+
         $query = User::query()->latest();
         $this->applySearch($query, $request, ['name', 'email', 'role']);
 
@@ -112,6 +120,10 @@ class PropifyController extends Controller
 
     public function storeUser(Request $request): JsonResponse
     {
+        if ($guard = $this->guard($request, 'users.manage')) {
+            return $guard;
+        }
+
         $validator = Validator::make($request->all(), $this->userRules(), $this->messages());
 
         if ($validator->fails()) {
@@ -125,6 +137,10 @@ class PropifyController extends Controller
 
     public function updateUser(Request $request, User $user): JsonResponse
     {
+        if ($guard = $this->guard($request, 'users.manage')) {
+            return $guard;
+        }
+
         $validator = Validator::make($request->all(), $this->userRules($user), $this->messages());
 
         if ($validator->fails()) {
@@ -143,8 +159,12 @@ class PropifyController extends Controller
         return $this->json($this->userResource($user->refresh()));
     }
 
-    public function deleteUser(User $user): JsonResponse
+    public function deleteUser(Request $request, User $user): JsonResponse
     {
+        if ($guard = $this->guard($request, 'users.manage')) {
+            return $guard;
+        }
+
         if ($user->role === 'system_admin' && User::where('role', 'system_admin')->count() <= 1) {
             return $this->json([
                 'message' => 'لا يمكن حذف آخر مدير نظام.',
@@ -159,6 +179,10 @@ class PropifyController extends Controller
 
     public function properties(Request $request): JsonResponse
     {
+        if ($guard = $this->guard($request)) {
+            return $guard;
+        }
+
         $query = Property::query()->latest();
         $this->applySearch($query, $request, ['code', 'type', 'mode', 'area', 'status', 'owner']);
 
@@ -171,6 +195,10 @@ class PropifyController extends Controller
 
     public function storeProperty(Request $request): JsonResponse
     {
+        if ($guard = $this->guard($request, 'properties.create')) {
+            return $guard;
+        }
+
         $validator = Validator::make($request->all(), [
             'type' => ['required', 'string'],
             'mode' => ['required', 'string'],
@@ -207,6 +235,10 @@ class PropifyController extends Controller
 
     public function updateProperty(Request $request, Property $property): JsonResponse
     {
+        if ($guard = $this->guard($request, 'properties.update')) {
+            return $guard;
+        }
+
         $validator = Validator::make($request->all(), $this->propertyRules(), $this->messages());
 
         if ($validator->fails()) {
@@ -218,15 +250,23 @@ class PropifyController extends Controller
         return $this->json($this->propertyResource($property->refresh()));
     }
 
-    public function approveProperty(Property $property): JsonResponse
+    public function approveProperty(Request $request, Property $property): JsonResponse
     {
+        if ($guard = $this->guard($request, 'properties.approve')) {
+            return $guard;
+        }
+
         $property->update(['status' => 'متاح']);
 
         return $this->json($this->propertyResource($property->refresh()));
     }
 
-    public function deleteProperty(Property $property): JsonResponse
+    public function deleteProperty(Request $request, Property $property): JsonResponse
     {
+        if ($guard = $this->guard($request, 'properties.update')) {
+            return $guard;
+        }
+
         if (Contract::where('property_code', $property->code)->exists()) {
             return $this->json([
                 'message' => 'لا يمكن حذف عقار مرتبط بعقد.',
@@ -242,8 +282,12 @@ class PropifyController extends Controller
         return $this->json(['ok' => true]);
     }
 
-    public function propertyMedia(Property $property): JsonResponse
+    public function propertyMedia(Request $request, Property $property): JsonResponse
     {
+        if ($guard = $this->guard($request)) {
+            return $guard;
+        }
+
         return $this->json(
             PropertyMedia::query()
                 ->where('property_code', $property->code)
@@ -255,6 +299,10 @@ class PropifyController extends Controller
 
     public function storePropertyMedia(Request $request, Property $property): JsonResponse
     {
+        if ($guard = $this->guard($request, 'properties.update')) {
+            return $guard;
+        }
+
         $validator = Validator::make($request->all(), [
             'files' => ['required', 'array', 'max:20'],
             'files.*' => ['file', 'max:5120', 'mimes:jpg,jpeg,png,webp,pdf,doc,docx'],
@@ -285,6 +333,10 @@ class PropifyController extends Controller
 
     public function clients(Request $request): JsonResponse
     {
+        if ($guard = $this->guard($request, 'clients.manage')) {
+            return $guard;
+        }
+
         $query = Client::query()->latest();
         $this->applySearch($query, $request, ['name', 'role', 'phone', 'stage', 'source']);
 
@@ -293,6 +345,10 @@ class PropifyController extends Controller
 
     public function storeClient(Request $request): JsonResponse
     {
+        if ($guard = $this->guard($request, 'clients.manage')) {
+            return $guard;
+        }
+
         $validator = Validator::make($request->all(), $this->clientRules(), $this->messages());
 
         if ($validator->fails()) {
@@ -306,6 +362,10 @@ class PropifyController extends Controller
 
     public function updateClient(Request $request, Client $client): JsonResponse
     {
+        if ($guard = $this->guard($request, 'clients.manage')) {
+            return $guard;
+        }
+
         $validator = Validator::make($request->all(), $this->clientRules(), $this->messages());
 
         if ($validator->fails()) {
@@ -317,8 +377,12 @@ class PropifyController extends Controller
         return $this->json($this->clientResource($client->refresh()));
     }
 
-    public function deleteClient(Client $client): JsonResponse
+    public function deleteClient(Request $request, Client $client): JsonResponse
     {
+        if ($guard = $this->guard($request, 'clients.manage')) {
+            return $guard;
+        }
+
         $hasContracts = Contract::where('client', $client->name)->exists();
         $hasVouchers = Voucher::where('client', $client->name)->exists();
 
@@ -336,6 +400,10 @@ class PropifyController extends Controller
 
     public function contracts(Request $request): JsonResponse
     {
+        if ($guard = $this->guard($request)) {
+            return $guard;
+        }
+
         $query = Contract::query()->latest();
         $this->applySearch($query, $request, ['code', 'property_code', 'client', 'kind', 'status']);
 
@@ -344,6 +412,10 @@ class PropifyController extends Controller
 
     public function storeContract(Request $request): JsonResponse
     {
+        if ($guard = $this->guard($request, 'contracts.create')) {
+            return $guard;
+        }
+
         $validator = Validator::make($request->all(), $this->contractRules(), $this->messages());
 
         if ($validator->fails()) {
@@ -376,6 +448,10 @@ class PropifyController extends Controller
 
     public function updateContract(Request $request, Contract $contract): JsonResponse
     {
+        if ($guard = $this->guard($request, 'contracts.create')) {
+            return $guard;
+        }
+
         $validator = Validator::make($request->all(), $this->contractRules(), $this->messages());
 
         if ($validator->fails()) {
@@ -395,8 +471,12 @@ class PropifyController extends Controller
         return $this->json($this->contractResource($contract->refresh()));
     }
 
-    public function deleteContract(Contract $contract): JsonResponse
+    public function deleteContract(Request $request, Contract $contract): JsonResponse
     {
+        if ($guard = $this->guard($request, 'contracts.create')) {
+            return $guard;
+        }
+
         if (Voucher::where('contract_code', $contract->code)->exists()) {
             return $this->json([
                 'message' => 'لا يمكن حذف عقد مرتبط بسندات.',
@@ -410,8 +490,12 @@ class PropifyController extends Controller
         return $this->json(['ok' => true]);
     }
 
-    public function printContract(Contract $contract)
+    public function printContract(Request $request, Contract $contract)
     {
+        if ($guard = $this->guard($request, 'contracts.print')) {
+            return $guard;
+        }
+
         $property = Property::where('code', $contract->property_code)->first();
         $installments = Installment::where('contract_code', $contract->code)->orderBy('number')->get();
 
@@ -460,6 +544,10 @@ class PropifyController extends Controller
 
     public function installments(Request $request): JsonResponse
     {
+        if ($guard = $this->guard($request)) {
+            return $guard;
+        }
+
         $query = Installment::query()->orderBy('due_date');
         $this->applySearch($query, $request, ['contract_code', 'status']);
 
@@ -468,6 +556,10 @@ class PropifyController extends Controller
 
     public function payInstallment(Request $request, Installment $installment): JsonResponse
     {
+        if ($guard = $this->guard($request, 'vouchers.manage')) {
+            return $guard;
+        }
+
         if ($installment->status === 'مدفوع') {
             return $this->json(['message' => 'القسط مدفوع مسبقاً.', 'errors' => ['installment' => ['القسط مدفوع مسبقاً.']]], 409);
         }
@@ -521,6 +613,10 @@ class PropifyController extends Controller
 
     public function vouchers(Request $request): JsonResponse
     {
+        if ($guard = $this->guard($request, 'vouchers.manage')) {
+            return $guard;
+        }
+
         $query = Voucher::query()->latest();
         $this->applySearch($query, $request, ['code', 'type', 'client', 'reason', 'property_code', 'contract_code']);
 
@@ -529,6 +625,10 @@ class PropifyController extends Controller
 
     public function storeVoucher(Request $request): JsonResponse
     {
+        if ($guard = $this->guard($request, 'vouchers.manage')) {
+            return $guard;
+        }
+
         $validator = Validator::make($request->all(), $this->voucherRules(), $this->messages());
 
         if ($validator->fails()) {
@@ -548,6 +648,10 @@ class PropifyController extends Controller
 
     public function updateVoucher(Request $request, Voucher $voucher): JsonResponse
     {
+        if ($guard = $this->guard($request, 'vouchers.manage')) {
+            return $guard;
+        }
+
         if (Str::startsWith($voucher->reason, 'تسديد قسط')) {
             return $this->json([
                 'message' => 'لا يمكن تعديل سند ناتج عن تسديد قسط.',
@@ -568,8 +672,12 @@ class PropifyController extends Controller
         return $this->json($this->voucherResource($voucher->refresh()));
     }
 
-    public function deleteVoucher(Voucher $voucher): JsonResponse
+    public function deleteVoucher(Request $request, Voucher $voucher): JsonResponse
     {
+        if ($guard = $this->guard($request, 'vouchers.manage')) {
+            return $guard;
+        }
+
         if (Str::startsWith($voucher->reason, 'تسديد قسط')) {
             return $this->json([
                 'message' => 'لا يمكن حذف سند ناتج عن تسديد قسط.',
@@ -583,8 +691,12 @@ class PropifyController extends Controller
         return $this->json(['ok' => true]);
     }
 
-    public function printVoucher(Voucher $voucher)
+    public function printVoucher(Request $request, Voucher $voucher)
     {
+        if ($guard = $this->guard($request, 'vouchers.manage')) {
+            return $guard;
+        }
+
         $rows = [
             ['رقم السند', $voucher->code],
             ['نوع السند', $voucher->type],
@@ -602,15 +714,23 @@ class PropifyController extends Controller
         );
     }
 
-    public function ledger(): JsonResponse
+    public function ledger(Request $request): JsonResponse
     {
+        if ($guard = $this->guard($request, 'vouchers.manage')) {
+            return $guard;
+        }
+
         return $this->json(
             LedgerEntry::query()->latest()->get()->map(fn (LedgerEntry $entry) => $this->ledgerResource($entry))
         );
     }
 
-    public function notifications(): JsonResponse
+    public function notifications(Request $request): JsonResponse
     {
+        if ($guard = $this->guard($request)) {
+            return $guard;
+        }
+
         $dueInstallments = Installment::query()
             ->whereDate('due_date', '<=', Carbon::now()->addDays(7)->toDateString())
             ->where('status', '!=', 'مدفوع')
@@ -678,13 +798,21 @@ class PropifyController extends Controller
         );
     }
 
-    public function settings(): JsonResponse
+    public function settings(Request $request): JsonResponse
     {
+        if ($guard = $this->guard($request)) {
+            return $guard;
+        }
+
         return $this->json($this->settingsResource($this->appSettings()));
     }
 
     public function updateSettings(Request $request): JsonResponse
     {
+        if ($guard = $this->guard($request, 'settings.update')) {
+            return $guard;
+        }
+
         $validator = Validator::make($request->all(), [
             'companyName' => ['required', 'string', 'max:120'],
             'companyPhone' => ['nullable', 'string', 'max:40'],
@@ -706,6 +834,10 @@ class PropifyController extends Controller
 
     public function financialReport(Request $request)
     {
+        if ($guard = $this->guard($request, 'reports.view')) {
+            return $guard;
+        }
+
         $ledgerQuery = LedgerEntry::query();
         $this->applyDateRange($ledgerQuery, $request, 'entry_date');
 
@@ -742,6 +874,10 @@ class PropifyController extends Controller
 
     public function propertiesReport(Request $request)
     {
+        if ($guard = $this->guard($request, 'reports.view')) {
+            return $guard;
+        }
+
         $query = Property::query();
 
         if ($request->filled('status') && $request->query('status') !== 'الكل') {
@@ -778,6 +914,10 @@ class PropifyController extends Controller
 
     public function installmentsReport(Request $request)
     {
+        if ($guard = $this->guard($request, 'reports.view')) {
+            return $guard;
+        }
+
         $query = Installment::query()->orderBy('due_date');
         $this->applyDateRange($query, $request, 'due_date');
 
@@ -812,8 +952,12 @@ class PropifyController extends Controller
         ]);
     }
 
-    public function employeePerformanceReport(): JsonResponse
+    public function employeePerformanceReport(Request $request): JsonResponse
     {
+        if ($guard = $this->guard($request, 'reports.view')) {
+            return $guard;
+        }
+
         $users = User::query()->latest()->get();
 
         return $this->json([
@@ -1185,6 +1329,27 @@ HTML;
             'mimes' => 'نوع الملف غير مدعوم.',
             'max' => 'القيمة تتجاوز الحد المسموح.',
         ];
+    }
+
+    private function guard(Request $request, ?string $permission = null): ?JsonResponse
+    {
+        $user = $this->userFromRequest($request);
+
+        if (! $user) {
+            return $this->json([
+                'message' => 'يرجى تسجيل الدخول أولاً.',
+                'errors' => ['auth' => ['يرجى تسجيل الدخول أولاً.']],
+            ], 401);
+        }
+
+        if (! $permission || $user->role === 'system_admin' || in_array($permission, $user->permissions ?? [], true)) {
+            return null;
+        }
+
+        return $this->json([
+            'message' => 'ليست لديك صلاحية لتنفيذ هذا الإجراء.',
+            'errors' => ['permission' => ['ليست لديك صلاحية لتنفيذ هذا الإجراء.']],
+        ], 403);
     }
 
     private function userFromRequest(Request $request): ?User

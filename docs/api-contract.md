@@ -27,6 +27,14 @@ Authorization: Bearer {token}
 
 `POST /api/auth/logout`
 
+All operational endpoints except `POST /api/auth/login`, `GET /api/health`, and `OPTIONS` require:
+
+```text
+Authorization: Bearer {token}
+```
+
+Sensitive actions additionally require matching user permissions such as `users.manage`, `properties.create`, `properties.update`, `properties.approve`, `clients.manage`, `contracts.create`, `contracts.print`, `vouchers.manage`, `reports.view`, or `settings.update`. The `system_admin` role bypasses individual permission checks.
+
 ## Users
 
 `GET /api/users`
