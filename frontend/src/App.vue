@@ -1815,6 +1815,24 @@ const downloadLedger = async () => {
   }
 }
 
+const downloadClients = async () => {
+  try {
+    const response = await fetch(`${API_BASE_URL}/clients?export=csv`, {
+      headers: {
+        ...(authToken.value ? { Authorization: `Bearer ${authToken.value}` } : {}),
+      },
+    })
+    if (!response.ok) throw new Error('Clients export failed')
+
+    const content = await response.text()
+    downloadFile('propify-clients.csv', content)
+    apiOnline.value = true
+  } catch {
+    apiOnline.value = false
+    showSuccess('تعذر تنزيل قائمة العملاء من API.')
+  }
+}
+
 const downloadBackup = async () => {
   try {
     const response = await fetch(`${API_BASE_URL}/backup/export`, {
@@ -2360,6 +2378,7 @@ onMounted(loadCurrentUser)
             <div class="panel-actions">
               <button class="text-button ghost-button" type="button" @click="sortClients('name')">الاسم {{ clientSortLabel('name') }}</button>
               <button class="text-button ghost-button" type="button" @click="sortClients('stage')">المرحلة {{ clientSortLabel('stage') }}</button>
+              <button class="text-button ghost-button" type="button" title="تنزيل العملاء" @click="downloadClients"><Download :size="17" /></button>
             </div>
           </div>
           <div class="stack-list">

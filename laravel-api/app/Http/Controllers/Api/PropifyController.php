@@ -376,8 +376,23 @@ class PropifyController extends Controller
 
         $query = Client::query()->latest();
         $this->applySearch($query, $request, ['name', 'role', 'phone', 'stage', 'source']);
+        $clients = $query->get();
 
-        return $this->json($query->get()->map(fn (Client $client) => $this->clientResource($client)));
+        if ($request->query('export') === 'csv') {
+            return $this->csvResponse([
+                ['الاسم', 'العلاقة', 'الهاتف', 'رقم البطاقة', 'المرحلة', 'المصدر'],
+                ...$clients->map(fn (Client $client) => [
+                    $client->name,
+                    $client->role,
+                    $client->phone,
+                    $client->national_id,
+                    $client->stage,
+                    $client->source,
+                ])->all(),
+            ], 'propify-clients.csv');
+        }
+
+        return $this->json($clients->map(fn (Client $client) => $this->clientResource($client)));
     }
 
     public function storeClient(Request $request): JsonResponse
