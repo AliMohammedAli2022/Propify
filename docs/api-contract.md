@@ -33,6 +33,10 @@ Authorization: Bearer {token}
 
 `POST /api/users`
 
+`PUT /api/users/{id}`
+
+`DELETE /api/users/{id}`
+
 ```json
 {
   "name": "موظف المبيعات",

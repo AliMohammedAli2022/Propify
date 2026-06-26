@@ -178,6 +178,7 @@ const userForm = ref({
   role: 'sales',
   permissions: ['properties.create', 'clients.manage'],
 })
+const editingUserId = ref('')
 
 const nextPropertyCode = computed(() => {
   const next = properties.value.length + 145
@@ -370,7 +371,8 @@ const validateUser = () => {
 
   if (!userForm.value.name.trim()) errors.name = ['يرجى إدخال اسم المستخدم.']
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(userForm.value.email)) errors.email = ['يرجى إدخال بريد إلكتروني صحيح.']
-  if (userForm.value.password.length < 6) errors.password = ['كلمة المرور يجب ألا تقل عن 6 أحرف.']
+  if (!editingUserId.value && userForm.value.password.length < 6) errors.password = ['كلمة المرور يجب ألا تقل عن 6 أحرف.']
+  if (editingUserId.value && userForm.value.password && userForm.value.password.length < 6) errors.password = ['كلمة المرور يجب ألا تقل عن 6 أحرف.']
 
   userErrors.value = errors
   return Object.keys(errors).length === 0
@@ -378,25 +380,64 @@ const validateUser = () => {
 
 const addUser = () => {
   if (!validateUser()) return
+  const endpoint = editingUserId.value ? `/users/${editingUserId.value}` : '/users'
+  const method = editingUserId.value ? 'PUT' : 'POST'
 
-  apiRequest('/users', {
-    method: 'POST',
+  apiRequest(endpoint, {
+    method,
     body: JSON.stringify(userForm.value),
   })
     .then((createdUser) => {
-      users.value.unshift(createdUser)
+      if (editingUserId.value) {
+        users.value = users.value.map((user) => (user.id === createdUser.id ? createdUser : user))
+      } else {
+        users.value.unshift(createdUser)
+      }
       userErrors.value = {}
       apiOnline.value = true
-      showSuccess('تم إنشاء المستخدم وتحديد صلاحياته.')
-      userForm.value.name = ''
-      userForm.value.email = ''
-      userForm.value.password = ''
-      userForm.value.role = 'sales'
-      userForm.value.permissions = ['properties.create', 'clients.manage']
+      showSuccess(editingUserId.value ? 'تم تحديث المستخدم وصلاحياته.' : 'تم إنشاء المستخدم وتحديد صلاحياته.')
+      resetUserForm()
     })
     .catch((error) => {
       apiOnline.value = false
       userErrors.value = error.errors || {}
+    })
+}
+
+const resetUserForm = () => {
+  userForm.value.name = ''
+  userForm.value.email = ''
+  userForm.value.password = ''
+  userForm.value.role = 'sales'
+  userForm.value.permissions = ['properties.create', 'clients.manage']
+  editingUserId.value = ''
+}
+
+const startEditUser = (user) => {
+  editingUserId.value = user.id
+  userForm.value.name = user.name
+  userForm.value.email = user.email
+  userForm.value.password = ''
+  userForm.value.role = user.role
+  userForm.value.permissions = [...(user.permissions || [])]
+  activeSection.value = 'permissions'
+  showSuccess(`تم تحميل المستخدم ${user.name} للتعديل.`)
+}
+
+const deleteUser = (user) => {
+  if (!window.confirm(`هل تريد حذف المستخدم ${user.name}؟`)) return
+
+  apiRequest(`/users/${user.id}`, { method: 'DELETE' })
+    .then(() => {
+      users.value = users.value.filter((item) => item.id !== user.id)
+      apiOnline.value = true
+      showSuccess(`تم حذف المستخدم ${user.name}.`)
+      return loadApiData()
+    })
+    .catch((error) => {
+      apiOnline.value = false
+      const message = error.errors?.user?.[0] || error.errors?.role?.[0] || 'تعذر حذف المستخدم.'
+      showSuccess(message)
     })
 }
 
@@ -1767,7 +1808,8 @@ onMounted(loadCurrentUser)
                 <span>{{ permission.label }}</span>
               </label>
             </div>
-            <button class="submit-button" type="submit"><Plus :size="18" /> إضافة مستخدم</button>
+            <button class="submit-button" type="submit"><Plus :size="18" /> {{ editingUserId ? 'حفظ التعديل' : 'إضافة مستخدم' }}</button>
+            <button v-if="editingUserId" class="text-button ghost-button" type="button" @click="resetUserForm">إلغاء التعديل</button>
           </form>
           <div class="stack-list users-list">
             <div v-for="user in users" :key="user.email" class="list-row">
@@ -1775,7 +1817,11 @@ onMounted(loadCurrentUser)
                 <strong>{{ user.name }}</strong>
                 <span>{{ user.email }} · {{ roleLabel(user.role) }}</span>
               </div>
-              <small>{{ user.permissions.length }} صلاحيات</small>
+              <div class="row-actions">
+                <small>{{ user.permissions.length }} صلاحيات</small>
+                <button class="mini-button" type="button" title="تعديل المستخدم" @click="startEditUser(user)">ت</button>
+                <button class="mini-button danger-action" type="button" title="حذف المستخدم" @click="deleteUser(user)">×</button>
+              </div>
             </div>
           </div>
         </article>

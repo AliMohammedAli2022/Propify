@@ -12,6 +12,8 @@ Route::get('/health', [PropifyController::class, 'health']);
 Route::get('/dashboard', [PropifyController::class, 'dashboard']);
 Route::get('/users', [PropifyController::class, 'users']);
 Route::post('/users', [PropifyController::class, 'storeUser']);
+Route::put('/users/{user}', [PropifyController::class, 'updateUser']);
+Route::delete('/users/{user}', [PropifyController::class, 'deleteUser']);
 Route::get('/properties', [PropifyController::class, 'properties']);
 Route::post('/properties', [PropifyController::class, 'storeProperty']);
 Route::put('/properties/{property:code}', [PropifyController::class, 'updateProperty']);

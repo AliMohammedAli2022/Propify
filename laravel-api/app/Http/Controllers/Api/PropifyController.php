@@ -111,28 +111,49 @@ class PropifyController extends Controller
 
     public function storeUser(Request $request): JsonResponse
     {
-        $validator = Validator::make($request->all(), [
-            'name' => ['required', 'string'],
-            'email' => ['required', 'email', 'unique:users,email'],
-            'password' => ['required', 'string', 'min:6'],
-            'role' => ['required', 'string'],
-            'permissions' => ['array'],
-            'permissions.*' => ['string'],
-        ], $this->messages());
+        $validator = Validator::make($request->all(), $this->userRules(), $this->messages());
 
         if ($validator->fails()) {
             return $this->json(['message' => 'Validation failed', 'errors' => $validator->errors()], 422);
         }
 
-        $user = User::create([
-            'name' => $request->string('name'),
-            'email' => $request->string('email'),
-            'password' => Hash::make($request->string('password')),
-            'role' => $request->string('role'),
-            'permissions' => $request->input('permissions', []),
-        ]);
+        $user = User::create($this->userData($request, true));
 
         return $this->json($this->userResource($user), 201);
+    }
+
+    public function updateUser(Request $request, User $user): JsonResponse
+    {
+        $validator = Validator::make($request->all(), $this->userRules($user), $this->messages());
+
+        if ($validator->fails()) {
+            return $this->json(['message' => 'Validation failed', 'errors' => $validator->errors()], 422);
+        }
+
+        if ($user->role === 'system_admin' && $request->input('role') !== 'system_admin' && User::where('role', 'system_admin')->count() <= 1) {
+            return $this->json([
+                'message' => 'لا يمكن إزالة آخر مدير نظام.',
+                'errors' => ['role' => ['لا يمكن إزالة آخر مدير نظام.']],
+            ], 409);
+        }
+
+        $user->update($this->userData($request, false));
+
+        return $this->json($this->userResource($user->refresh()));
+    }
+
+    public function deleteUser(User $user): JsonResponse
+    {
+        if ($user->role === 'system_admin' && User::where('role', 'system_admin')->count() <= 1) {
+            return $this->json([
+                'message' => 'لا يمكن حذف آخر مدير نظام.',
+                'errors' => ['user' => ['لا يمكن حذف آخر مدير نظام.']],
+            ], 409);
+        }
+
+        $user->delete();
+
+        return $this->json(['ok' => true]);
     }
 
     public function properties(Request $request): JsonResponse
@@ -751,6 +772,36 @@ class PropifyController extends Controller
                 $builder->orWhere($column, 'like', "%{$search}%");
             }
         });
+    }
+
+    private function userRules(?User $user = null): array
+    {
+        $emailRule = $user ? 'unique:users,email,'.$user->id : 'unique:users,email';
+
+        return [
+            'name' => ['required', 'string'],
+            'email' => ['required', 'email', $emailRule],
+            'password' => [$user ? 'nullable' : 'required', 'string', 'min:6'],
+            'role' => ['required', 'string'],
+            'permissions' => ['array'],
+            'permissions.*' => ['string'],
+        ];
+    }
+
+    private function userData(Request $request, bool $requirePassword): array
+    {
+        $data = [
+            'name' => $request->string('name'),
+            'email' => $request->string('email'),
+            'role' => $request->string('role'),
+            'permissions' => $request->input('permissions', []),
+        ];
+
+        if ($requirePassword || $request->filled('password')) {
+            $data['password'] = Hash::make($request->string('password'));
+        }
+
+        return $data;
     }
 
     private function propertyRules(): array
