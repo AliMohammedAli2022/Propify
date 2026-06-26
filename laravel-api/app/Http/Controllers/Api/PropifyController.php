@@ -700,8 +700,25 @@ class PropifyController extends Controller
 
         $query = Voucher::query()->latest();
         $this->applySearch($query, $request, ['code', 'type', 'client', 'reason', 'property_code', 'contract_code']);
+        $vouchers = $query->get();
 
-        return $this->json($query->get()->map(fn (Voucher $voucher) => $this->voucherResource($voucher)));
+        if ($request->query('export') === 'csv') {
+            return $this->csvResponse([
+                ['رقم السند', 'النوع', 'الطرف', 'المبلغ', 'السبب', 'العقار', 'العقد', 'تاريخ الإصدار'],
+                ...$vouchers->map(fn (Voucher $voucher) => [
+                    $voucher->code,
+                    $voucher->type,
+                    $voucher->client,
+                    $voucher->amount,
+                    $voucher->reason,
+                    $voucher->property_code,
+                    $voucher->contract_code,
+                    $voucher->issued_at->format('Y-m-d'),
+                ])->all(),
+            ], 'propify-vouchers.csv');
+        }
+
+        return $this->json($vouchers->map(fn (Voucher $voucher) => $this->voucherResource($voucher)));
     }
 
     public function storeVoucher(Request $request): JsonResponse

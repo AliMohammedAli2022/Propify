@@ -1851,6 +1851,24 @@ const downloadContracts = async () => {
   }
 }
 
+const downloadVouchers = async () => {
+  try {
+    const response = await fetch(`${API_BASE_URL}/vouchers?export=csv`, {
+      headers: {
+        ...(authToken.value ? { Authorization: `Bearer ${authToken.value}` } : {}),
+      },
+    })
+    if (!response.ok) throw new Error('Vouchers export failed')
+
+    const content = await response.text()
+    downloadFile('propify-vouchers.csv', content)
+    apiOnline.value = true
+  } catch {
+    apiOnline.value = false
+    showSuccess('تعذر تنزيل قائمة السندات من API.')
+  }
+}
+
 const downloadBackup = async () => {
   try {
     const response = await fetch(`${API_BASE_URL}/backup/export`, {
@@ -2552,6 +2570,7 @@ onMounted(loadCurrentUser)
             <div class="panel-actions">
               <button class="ghost-button" type="button" @click="sortVouchers('code')">الرقم {{ voucherSortLabel('code') }}</button>
               <button class="ghost-button" type="button" @click="sortVouchers('amount')">المبلغ {{ voucherSortLabel('amount') }}</button>
+              <button class="ghost-button" type="button" title="تنزيل السندات" @click="downloadVouchers"><Download :size="17" /></button>
             </div>
           </div>
           <form class="smart-form finance-form" @submit.prevent="addVoucher">
