@@ -359,6 +359,23 @@ h2 {
   margin-bottom: 14px;
 }
 
+.panel-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.compact-select {
+  min-height: 38px;
+  min-width: 138px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 0 10px;
+  color: var(--text);
+  background: var(--surface);
+}
+
 .code-pill {
   display: inline-flex;
   align-items: center;
@@ -473,6 +490,11 @@ th {
   color: var(--muted);
   background: var(--surface-2);
   font-size: 0.86rem;
+}
+
+.empty-cell {
+  color: var(--muted);
+  text-align: center;
 }
 
 .badge {

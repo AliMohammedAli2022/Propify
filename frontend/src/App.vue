@@ -1,5 +1,5 @@
 <script setup>
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import {
   AlertCircle,
   Bell,
@@ -31,6 +31,8 @@ const darkMode = ref(false)
 const collapsed = ref(false)
 const activeSection = ref('dashboard')
 const welcomeVisible = ref(true)
+const searchQuery = ref('')
+const statusFilter = ref('الكل')
 
 setTimeout(() => {
   welcomeVisible.value = false
@@ -47,14 +49,7 @@ const navItems = [
   { id: 'settings', label: 'الإعدادات', icon: Settings },
 ]
 
-const stats = [
-  { label: 'إجمالي العقارات', value: '248', trend: '+18 هذا الشهر', icon: Building2 },
-  { label: 'العقارات المتاحة', value: '132', trend: '53% من المخزون', icon: Home },
-  { label: 'أرباح المكتب', value: '42.8م', trend: '+12% عن الشهر السابق', icon: CircleDollarSign },
-  { label: 'أقساط مستحقة', value: '16', trend: '5 متأخرة', icon: CalendarClock },
-]
-
-const properties = ref([
+const propertySeeds = [
   {
     code: 'PR-2026-000145',
     type: 'دار سكنية',
@@ -82,13 +77,25 @@ const properties = ref([
     status: 'قيد المراجعة',
     owner: 'سارة كريم',
   },
-])
+]
 
-const clients = ref([
+const clientSeeds = [
   { name: 'أحمد علي', role: 'مشتري', phone: '07701234567', stage: 'تفاوض', source: 'إعلان ممول' },
   { name: 'محمد حسن', role: 'مؤجر', phone: '07801234567', stage: 'عقد نشط', source: 'توصية' },
   { name: 'سارة كريم', role: 'مالكة عقار', phone: '07501234567', stage: 'مراجعة عقار', source: 'الموقع' },
-])
+]
+
+const loadStoredArray = (key, fallback) => {
+  try {
+    const value = localStorage.getItem(key)
+    return value ? JSON.parse(value) : fallback
+  } catch {
+    return fallback
+  }
+}
+
+const properties = ref(loadStoredArray('propify.properties', propertySeeds))
+const clients = ref(loadStoredArray('propify.clients', clientSeeds))
 
 const propertyForm = ref({
   type: 'دار سكنية',
@@ -232,6 +239,76 @@ const chartBars = [
   { label: 'حزيران', sales: 71, rent: 58 },
 ]
 
+const stats = computed(() => {
+  const available = properties.value.filter((property) => property.status === 'متاح').length
+  const reserved = properties.value.filter((property) => property.status === 'محجوز').length
+
+  return [
+    { label: 'إجمالي العقارات', value: String(properties.value.length), trend: `${available} متاح`, icon: Building2 },
+    { label: 'العقارات المتاحة', value: String(available), trend: `${reserved} محجوز`, icon: Home },
+    { label: 'أرباح المكتب', value: '42.8م', trend: '+12% عن الشهر السابق', icon: CircleDollarSign },
+    { label: 'أقساط مستحقة', value: '16', trend: '5 متأخرة', icon: CalendarClock },
+  ]
+})
+
+const propertyStatuses = computed(() => ['الكل', ...new Set(properties.value.map((property) => property.status))])
+
+const filteredProperties = computed(() => {
+  const query = searchQuery.value.trim().toLowerCase()
+
+  return properties.value.filter((property) => {
+    const matchesStatus = statusFilter.value === 'الكل' || property.status === statusFilter.value
+    const searchable = [property.code, property.type, property.mode, property.area, property.price, property.status, property.owner]
+      .join(' ')
+      .toLowerCase()
+
+    return matchesStatus && (!query || searchable.includes(query))
+  })
+})
+
+const downloadFile = (filename, content, type = 'text/csv;charset=utf-8') => {
+  const blob = new Blob(['\ufeff', content], { type })
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = filename
+  link.click()
+  URL.revokeObjectURL(url)
+}
+
+const exportProperties = () => {
+  const rows = [
+    ['رقم العقار', 'النوع', 'الغرض', 'المنطقة', 'السعر', 'الحالة', 'المالك'],
+    ...filteredProperties.value.map((property) => [
+      property.code,
+      property.type,
+      property.mode,
+      property.area,
+      property.price,
+      property.status,
+      property.owner,
+    ]),
+  ]
+  const csv = rows.map((row) => row.map((cell) => `"${String(cell).replaceAll('"', '""')}"`).join(',')).join('\n')
+  downloadFile('propify-properties.csv', csv)
+}
+
+watch(
+  properties,
+  (value) => {
+    localStorage.setItem('propify.properties', JSON.stringify(value))
+  },
+  { deep: true },
+)
+
+watch(
+  clients,
+  (value) => {
+    localStorage.setItem('propify.clients', JSON.stringify(value))
+  },
+  { deep: true },
+)
+
 const statusClass = (status) =>
   ({
     متاح: 'success',
@@ -290,7 +367,7 @@ const shellClasses = computed(() => ({
         <div class="toolbar">
           <label class="search">
             <Search :size="18" />
-            <input type="search" placeholder="ابحث برقم عقار، عميل، عقد..." />
+            <input v-model="searchQuery" type="search" placeholder="ابحث برقم عقار، عميل، عقد..." />
           </label>
           <button class="icon-button" type="button" title="الإشعارات">
             <Bell :size="20" />
@@ -452,7 +529,12 @@ const shellClasses = computed(() => ({
               <p class="eyebrow">العقارات</p>
               <h2>مخزون العقارات الحالي</h2>
             </div>
-            <button class="text-button" type="button"><Download :size="18" /> تصدير Excel</button>
+            <div class="panel-actions">
+              <select v-model="statusFilter" class="compact-select" aria-label="فلترة حسب حالة العقار">
+                <option v-for="status in propertyStatuses" :key="status">{{ status }}</option>
+              </select>
+              <button class="text-button" type="button" @click="exportProperties"><Download :size="18" /> تصدير Excel</button>
+            </div>
           </div>
           <div class="table-wrap">
             <table>
@@ -468,7 +550,7 @@ const shellClasses = computed(() => ({
                 </tr>
               </thead>
               <tbody>
-                <tr v-for="property in properties" :key="property.code">
+                <tr v-for="property in filteredProperties" :key="property.code">
                   <td>{{ property.code }}</td>
                   <td>{{ property.type }}</td>
                   <td>{{ property.mode }}</td>
@@ -476,6 +558,9 @@ const shellClasses = computed(() => ({
                   <td>{{ property.price }}</td>
                   <td><span class="badge" :class="statusClass(property.status)">{{ property.status }}</span></td>
                   <td>{{ property.owner }}</td>
+                </tr>
+                <tr v-if="filteredProperties.length === 0">
+                  <td colspan="7" class="empty-cell">لا توجد عقارات مطابقة للبحث أو الفلتر الحالي.</td>
                 </tr>
               </tbody>
             </table>
