@@ -168,6 +168,7 @@ const propertiesReport = ref(null)
 const installmentsReport = ref(null)
 const employeePerformanceReport = ref(null)
 const notifications = ref([])
+const activityLogs = ref([])
 const propertyMedia = ref([])
 const mediaErrors = ref({})
 const mediaForm = ref({
@@ -342,6 +343,7 @@ const loadApiData = async () => {
       serverInstallmentsReport,
       serverEmployeePerformanceReport,
       serverNotifications,
+      serverActivityLogs,
       serverSettings,
     ] = await Promise.all([
       apiRequest('/properties'),
@@ -356,6 +358,7 @@ const loadApiData = async () => {
       optionalApiRequest(reportPath('installments'), null),
       optionalApiRequest(reportPath('employee-performance'), null),
       apiRequest('/notifications'),
+      optionalApiRequest('/activity-logs', []),
       optionalApiRequest('/settings', settingsForm.value),
     ])
     properties.value = serverProperties
@@ -370,6 +373,7 @@ const loadApiData = async () => {
     installmentsReport.value = serverInstallmentsReport
     employeePerformanceReport.value = serverEmployeePerformanceReport
     notifications.value = serverNotifications
+    activityLogs.value = serverActivityLogs
     settingsForm.value = { ...settingsForm.value, ...serverSettings }
     if (!mediaForm.value.propertyCode && serverProperties.length > 0) {
       mediaForm.value.propertyCode = serverProperties[0].code
@@ -1690,6 +1694,26 @@ onMounted(loadCurrentUser)
               <strong>لا توجد تنبيهات</strong>
               <span>كل شيء مستقر حاليا.</span>
             </p>
+          </div>
+        </article>
+
+        <article v-if="showSection('dashboard') && hasPermission('reports.view')" class="panel">
+          <div class="panel-header">
+            <div>
+              <p class="eyebrow">النشاطات</p>
+              <h2>آخر عمليات النظام</h2>
+            </div>
+            <ClipboardCheck :size="22" />
+          </div>
+          <div class="stack-list activity-list">
+            <div v-for="activity in activityLogs.slice(0, 6)" :key="activity.id" class="list-row">
+              <div>
+                <strong>{{ activity.summary }}</strong>
+                <span>{{ activity.userName }} · {{ activity.createdAt }}</span>
+              </div>
+              <small>{{ activity.action }}</small>
+            </div>
+            <p v-if="activityLogs.length === 0" class="empty-note">لا توجد نشاطات مسجلة بعد.</p>
           </div>
         </article>
 

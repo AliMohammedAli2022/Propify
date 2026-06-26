@@ -761,6 +761,10 @@ td .row-actions {
   margin-bottom: 16px;
 }
 
+.activity-list .list-row {
+  align-items: flex-start;
+}
+
 .chart {
   min-height: 234px;
   display: grid;

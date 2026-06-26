@@ -275,6 +275,26 @@ Response item:
 }
 ```
 
+## Activity Logs
+
+`GET /api/activity-logs`
+
+Requires `reports.view`. Returns the latest tracked actions such as logins, creates, updates, deletes, payments, uploads, and settings changes.
+
+Response item:
+
+```json
+{
+  "id": 1,
+  "userName": "علي محمد",
+  "action": "create",
+  "subjectType": "property",
+  "subjectId": "PR-2026-000145",
+  "summary": "إضافة عقار PR-2026-000145",
+  "createdAt": "2026-06-26 12:00:00"
+}
+```
+
 ## Settings
 
 `GET /api/settings`

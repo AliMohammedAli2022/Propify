@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\ActivityLog;
 use App\Models\AppSetting;
 use App\Models\Client;
 use App\Models\Contract;
@@ -58,6 +59,7 @@ class PropifyController extends Controller
 
         $token = Str::random(64);
         $user->forceFill(['api_token' => hash('sha256', $token)])->save();
+        $this->logActivity($request, 'login', 'user', (string) $user->id, "تسجيل دخول {$user->name}", [], $user);
 
         return $this->json([
             'token' => $token,
@@ -82,6 +84,7 @@ class PropifyController extends Controller
 
         if ($user) {
             $user->forceFill(['api_token' => null])->save();
+            $this->logActivity($request, 'logout', 'user', (string) $user->id, "تسجيل خروج {$user->name}", [], $user);
         }
 
         return $this->json(['ok' => true]);
@@ -131,6 +134,7 @@ class PropifyController extends Controller
         }
 
         $user = User::create($this->userData($request, true));
+        $this->logActivity($request, 'create', 'user', (string) $user->id, "إضافة مستخدم {$user->name}");
 
         return $this->json($this->userResource($user), 201);
     }
@@ -155,6 +159,7 @@ class PropifyController extends Controller
         }
 
         $user->update($this->userData($request, false));
+        $this->logActivity($request, 'update', 'user', (string) $user->id, "تعديل مستخدم {$user->name}");
 
         return $this->json($this->userResource($user->refresh()));
     }
@@ -172,7 +177,10 @@ class PropifyController extends Controller
             ], 409);
         }
 
+        $summary = "حذف مستخدم {$user->name}";
+        $subjectId = (string) $user->id;
         $user->delete();
+        $this->logActivity($request, 'delete', 'user', $subjectId, $summary);
 
         return $this->json(['ok' => true]);
     }
@@ -229,6 +237,7 @@ class PropifyController extends Controller
             'owner' => $request->string('owner'),
             'negotiable' => $request->boolean('negotiable', true),
         ]);
+        $this->logActivity($request, 'create', 'property', $property->code, "إضافة عقار {$property->code}");
 
         return $this->json($this->propertyResource($property), 201);
     }
@@ -246,6 +255,7 @@ class PropifyController extends Controller
         }
 
         $property->update($this->propertyData($request));
+        $this->logActivity($request, 'update', 'property', $property->code, "تعديل عقار {$property->code}");
 
         return $this->json($this->propertyResource($property->refresh()));
     }
@@ -257,6 +267,7 @@ class PropifyController extends Controller
         }
 
         $property->update(['status' => 'متاح']);
+        $this->logActivity($request, 'approve', 'property', $property->code, "اعتماد عقار {$property->code}");
 
         return $this->json($this->propertyResource($property->refresh()));
     }
@@ -277,7 +288,10 @@ class PropifyController extends Controller
         $media = PropertyMedia::where('property_code', $property->code)->get();
         $media->each(fn (PropertyMedia $item) => Storage::disk('public')->delete($item->path));
         PropertyMedia::where('property_code', $property->code)->delete();
+        $summary = "حذف عقار {$property->code}";
+        $subjectId = $property->code;
         $property->delete();
+        $this->logActivity($request, 'delete', 'property', $subjectId, $summary);
 
         return $this->json(['ok' => true]);
     }
@@ -327,6 +341,7 @@ class PropifyController extends Controller
 
             return $this->mediaResource($media);
         });
+        $this->logActivity($request, 'upload', 'property', $property->code, "رفع ملفات للعقار {$property->code}", ['files_count' => $created->count()]);
 
         return $this->json($created, 201);
     }
@@ -356,6 +371,7 @@ class PropifyController extends Controller
         }
 
         $client = Client::create($this->clientData($request));
+        $this->logActivity($request, 'create', 'client', (string) $client->id, "إضافة عميل {$client->name}");
 
         return $this->json($this->clientResource($client), 201);
     }
@@ -373,6 +389,7 @@ class PropifyController extends Controller
         }
 
         $client->update($this->clientData($request));
+        $this->logActivity($request, 'update', 'client', (string) $client->id, "تعديل عميل {$client->name}");
 
         return $this->json($this->clientResource($client->refresh()));
     }
@@ -393,7 +410,10 @@ class PropifyController extends Controller
             ], 409);
         }
 
+        $summary = "حذف عميل {$client->name}";
+        $subjectId = (string) $client->id;
         $client->delete();
+        $this->logActivity($request, 'delete', 'client', $subjectId, $summary);
 
         return $this->json(['ok' => true]);
     }
@@ -426,6 +446,7 @@ class PropifyController extends Controller
             'code' => $this->nextCode(Contract::class, 'CT', 43),
             ...$this->contractData($request),
         ]);
+        $this->logActivity($request, 'create', 'contract', $contract->code, "إنشاء عقد {$contract->code}");
 
         if ($contract->kind === 'تقسيط') {
             $count = $request->integer('installmentsCount', 1);
@@ -467,6 +488,7 @@ class PropifyController extends Controller
         }
 
         $contract->update($this->contractData($request));
+        $this->logActivity($request, 'update', 'contract', $contract->code, "تعديل عقد {$contract->code}");
 
         return $this->json($this->contractResource($contract->refresh()));
     }
@@ -485,7 +507,10 @@ class PropifyController extends Controller
         }
 
         Installment::where('contract_code', $contract->code)->delete();
+        $summary = "حذف عقد {$contract->code}";
+        $subjectId = $contract->code;
         $contract->delete();
+        $this->logActivity($request, 'delete', 'contract', $subjectId, $summary);
 
         return $this->json(['ok' => true]);
     }
@@ -603,6 +628,7 @@ class PropifyController extends Controller
             'description' => "تسديد قسط {$installment->number} للعقد {$installment->contract_code}",
             'entry_date' => Carbon::now()->toDateString(),
         ]);
+        $this->logActivity($request, 'pay', 'installment', (string) $installment->id, "تسديد قسط {$installment->number} للعقد {$installment->contract_code}", ['amount' => $paidAmount]);
 
         return $this->json([
             'installment' => $this->installmentResource($installment->refresh()),
@@ -642,6 +668,7 @@ class PropifyController extends Controller
         ]);
 
         $this->syncVoucherLedger($voucher);
+        $this->logActivity($request, 'create', 'voucher', $voucher->code, "إنشاء سند {$voucher->type} {$voucher->code}");
 
         return $this->json($this->voucherResource($voucher), 201);
     }
@@ -668,6 +695,7 @@ class PropifyController extends Controller
         LedgerEntry::where('description', 'like', "%{$voucher->code}%")->delete();
         $voucher->update($this->voucherData($request));
         $this->syncVoucherLedger($voucher->refresh());
+        $this->logActivity($request, 'update', 'voucher', $voucher->code, "تعديل سند {$voucher->code}");
 
         return $this->json($this->voucherResource($voucher->refresh()));
     }
@@ -686,7 +714,10 @@ class PropifyController extends Controller
         }
 
         LedgerEntry::where('description', 'like', "%{$voucher->code}%")->delete();
+        $summary = "حذف سند {$voucher->code}";
+        $subjectId = $voucher->code;
         $voucher->delete();
+        $this->logActivity($request, 'delete', 'voucher', $subjectId, $summary);
 
         return $this->json(['ok' => true]);
     }
@@ -798,6 +829,21 @@ class PropifyController extends Controller
         );
     }
 
+    public function activityLogs(Request $request): JsonResponse
+    {
+        if ($guard = $this->guard($request, 'reports.view')) {
+            return $guard;
+        }
+
+        return $this->json(
+            ActivityLog::query()
+                ->latest()
+                ->limit(30)
+                ->get()
+                ->map(fn (ActivityLog $activity) => $this->activityResource($activity))
+        );
+    }
+
     public function settings(Request $request): JsonResponse
     {
         if ($guard = $this->guard($request)) {
@@ -828,6 +874,7 @@ class PropifyController extends Controller
 
         $settings = $this->appSettings();
         $settings->update($this->settingsData($request));
+        $this->logActivity($request, 'update', 'settings', (string) $settings->id, 'تحديث إعدادات المكتب');
 
         return $this->json($this->settingsResource($settings->refresh()));
     }
@@ -1071,6 +1118,21 @@ HTML;
         $items = collect($labels)->map(fn (string $label) => '<div>'.e($label).'</div>')->implode('');
 
         return "<div class=\"signatures\">{$items}</div>";
+    }
+
+    private function logActivity(Request $request, string $action, ?string $subjectType, ?string $subjectId, string $summary, array $meta = [], ?User $actor = null): void
+    {
+        $user = $actor ?? $this->userFromRequest($request);
+
+        ActivityLog::create([
+            'user_id' => $user?->id,
+            'user_name' => $user?->name,
+            'action' => $action,
+            'subject_type' => $subjectType,
+            'subject_id' => $subjectId,
+            'summary' => $summary,
+            'meta' => $meta,
+        ]);
     }
 
     private function appSettings(): AppSetting
@@ -1484,6 +1546,20 @@ HTML;
             'amount' => (float) $entry->amount,
             'description' => $entry->description,
             'entryDate' => $entry->entry_date->format('Y-m-d'),
+        ];
+    }
+
+    private function activityResource(ActivityLog $activity): array
+    {
+        return [
+            'id' => $activity->id,
+            'userName' => $activity->user_name ?? 'النظام',
+            'action' => $activity->action,
+            'subjectType' => $activity->subject_type,
+            'subjectId' => $activity->subject_id,
+            'summary' => $activity->summary,
+            'meta' => $activity->meta ?? [],
+            'createdAt' => $activity->created_at?->toDateTimeString(),
         ];
     }
 }
