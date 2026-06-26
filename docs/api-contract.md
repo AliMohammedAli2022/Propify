@@ -197,6 +197,16 @@ Expected behavior:
 
 `GET /api/installments`
 
+`POST /api/installments/{id}/pay`
+
+Optional request:
+
+```json
+{
+  "amount": 5000000
+}
+```
+
 Response:
 
 ```json

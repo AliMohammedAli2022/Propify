@@ -380,6 +380,59 @@ class PropifyController extends Controller
         return $this->json($query->get()->map(fn (Installment $installment) => $this->installmentResource($installment)));
     }
 
+    public function payInstallment(Request $request, Installment $installment): JsonResponse
+    {
+        if ($installment->status === 'مدفوع') {
+            return $this->json(['message' => 'القسط مدفوع مسبقاً.', 'errors' => ['installment' => ['القسط مدفوع مسبقاً.']]], 409);
+        }
+
+        $remaining = max(0, (float) $installment->amount - (float) $installment->paid_amount);
+        $paidAmount = $this->money($request->input('amount', $remaining));
+
+        if ($paidAmount <= 0 || $paidAmount > $remaining) {
+            return $this->json(['message' => 'Validation failed', 'errors' => ['amount' => ['مبلغ الدفع غير صحيح.']]], 422);
+        }
+
+        $installment->paid_amount = (float) $installment->paid_amount + $paidAmount;
+        $installment->status = $installment->paid_amount >= $installment->amount ? 'مدفوع' : 'مدفوع جزئياً';
+        $installment->save();
+
+        $contract = Contract::where('code', $installment->contract_code)->first();
+        if ($contract) {
+            $contract->paid = (float) $contract->paid + $paidAmount;
+            $contract->due = max(0, (float) $contract->due - $paidAmount);
+            if ($contract->due <= 0) {
+                $contract->status = 'مكتمل';
+            }
+            $contract->save();
+        }
+
+        $voucher = Voucher::create([
+            'code' => $this->nextCode(Voucher::class, 'RV', 0),
+            'type' => 'قبض',
+            'client' => $contract?->client ?? 'دفعة قسط',
+            'amount' => $paidAmount,
+            'reason' => "تسديد قسط {$installment->number} للعقد {$installment->contract_code}",
+            'property_code' => $contract?->property_code,
+            'contract_code' => $installment->contract_code,
+            'issued_at' => Carbon::now()->toDateString(),
+        ]);
+
+        LedgerEntry::create([
+            'code' => $this->nextCode(LedgerEntry::class, 'LE', 0),
+            'direction' => 'credit',
+            'amount' => $paidAmount,
+            'description' => "تسديد قسط {$installment->number} للعقد {$installment->contract_code}",
+            'entry_date' => Carbon::now()->toDateString(),
+        ]);
+
+        return $this->json([
+            'installment' => $this->installmentResource($installment->refresh()),
+            'contract' => $contract ? $this->contractResource($contract->refresh()) : null,
+            'voucher' => $this->voucherResource($voucher),
+        ]);
+    }
+
     public function vouchers(Request $request): JsonResponse
     {
         $query = Voucher::query()->latest();
@@ -803,6 +856,7 @@ class PropifyController extends Controller
     private function installmentResource(Installment $installment): array
     {
         return [
+            'id' => $installment->id,
             'contractCode' => $installment->contract_code,
             'number' => $installment->number,
             'dueDate' => $installment->due_date->format('Y-m-d'),

@@ -700,6 +700,37 @@ const addContract = () => {
   contractForm.value.installmentsCount = 12
 }
 
+const payInstallment = (installment) => {
+  if (installment.status === 'مدفوع') return
+
+  apiRequest(`/installments/${installment.id}/pay`, { method: 'POST' })
+    .then(() => Promise.all([
+      apiRequest('/contracts'),
+      apiRequest('/installments'),
+      apiRequest('/vouchers'),
+      apiRequest('/ledger'),
+      apiRequest('/reports/financial'),
+      apiRequest('/reports/installments'),
+      apiRequest('/notifications'),
+    ]))
+    .then(([serverContracts, serverInstallments, serverVouchers, serverLedger, serverFinancialReport, serverInstallmentsReport, serverNotifications]) => {
+      contracts.value = serverContracts
+      installments.value = serverInstallments
+      vouchers.value = serverVouchers
+      ledger.value = serverLedger
+      financialReport.value = serverFinancialReport
+      installmentsReport.value = serverInstallmentsReport
+      notifications.value = serverNotifications
+      apiOnline.value = true
+      showSuccess(`تم تسديد القسط ${installment.number} للعقد ${installment.contractCode}.`)
+    })
+    .catch((error) => {
+      apiOnline.value = false
+      const message = error.errors?.installment?.[0] || error.errors?.amount?.[0] || 'تعذر تسديد القسط.'
+      showSuccess(message)
+    })
+}
+
 const validateVoucher = () => {
   const errors = {}
   const amount = Number(String(voucherForm.value.amount).replaceAll(',', ''))
@@ -1475,7 +1506,18 @@ onMounted(loadCurrentUser)
                 <strong>{{ installment.contractCode }}</strong>
                 <span>القسط {{ installment.number }} · {{ installment.dueDate }}</span>
               </div>
-              <small>{{ formatMoney(installment.amount) }} · {{ installment.status }}</small>
+              <div class="row-actions">
+                <small>{{ formatMoney(installment.amount) }} · {{ installment.status }}</small>
+                <button
+                  class="mini-button"
+                  type="button"
+                  title="تسديد القسط"
+                  :disabled="installment.status === 'مدفوع'"
+                  @click="payInstallment(installment)"
+                >
+                  ✓
+                </button>
+              </div>
             </div>
           </div>
         </article>
