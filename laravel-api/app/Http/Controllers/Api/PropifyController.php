@@ -117,8 +117,22 @@ class PropifyController extends Controller
 
         $query = User::query()->latest();
         $this->applySearch($query, $request, ['name', 'email', 'role']);
+        $users = $query->get();
 
-        return $this->json($query->get()->map(fn (User $user) => $this->userResource($user)));
+        if ($request->query('export') === 'csv') {
+            return $this->csvResponse([
+                ['الاسم', 'البريد', 'الدور', 'عدد الصلاحيات', 'الصلاحيات'],
+                ...$users->map(fn (User $user) => [
+                    $user->name,
+                    $user->email,
+                    $user->role,
+                    count($user->permissions ?? []),
+                    implode(' | ', $user->permissions ?? []),
+                ])->all(),
+            ], 'propify-users.csv');
+        }
+
+        return $this->json($users->map(fn (User $user) => $this->userResource($user)));
     }
 
     public function storeUser(Request $request): JsonResponse

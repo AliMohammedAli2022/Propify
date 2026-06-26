@@ -1869,6 +1869,24 @@ const downloadVouchers = async () => {
   }
 }
 
+const downloadUsers = async () => {
+  try {
+    const response = await fetch(`${API_BASE_URL}/users?export=csv`, {
+      headers: {
+        ...(authToken.value ? { Authorization: `Bearer ${authToken.value}` } : {}),
+      },
+    })
+    if (!response.ok) throw new Error('Users export failed')
+
+    const content = await response.text()
+    downloadFile('propify-users.csv', content)
+    apiOnline.value = true
+  } catch {
+    apiOnline.value = false
+    showSuccess('تعذر تنزيل قائمة المستخدمين من API.')
+  }
+}
+
 const downloadBackup = async () => {
   try {
     const response = await fetch(`${API_BASE_URL}/backup/export`, {
@@ -2827,6 +2845,7 @@ onMounted(loadCurrentUser)
             <div class="panel-actions">
               <button class="ghost-button" type="button" @click="sortUsers('name')">الاسم {{ userSortLabel('name') }}</button>
               <button class="ghost-button" type="button" @click="sortUsers('role')">الدور {{ userSortLabel('role') }}</button>
+              <button class="ghost-button" type="button" title="تنزيل المستخدمين" @click="downloadUsers"><Download :size="17" /></button>
             </div>
           </div>
           <form class="smart-form user-form" @submit.prevent="addUser">
