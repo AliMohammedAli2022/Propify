@@ -131,15 +131,38 @@ const propertyErrors = ref({})
 const clientErrors = ref({})
 const voucherErrors = ref({})
 const contractErrors = ref({})
+const userErrors = ref({})
 const successMessage = ref('')
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000/api'
 const contracts = ref([])
 const installments = ref([])
 const vouchers = ref([])
 const ledger = ref([])
+const users = ref([])
 
 const iraqiPhonePattern = /^(075|077|078|079)[0-9]{8}$/
 const nationalIdPattern = /^[A-Za-z0-9]{12,}$/
+
+const availablePermissions = [
+  { key: 'properties.create', label: 'إضافة عقار' },
+  { key: 'properties.update', label: 'تعديل عقار' },
+  { key: 'properties.approve', label: 'قبول عقار من عميل' },
+  { key: 'clients.manage', label: 'إدارة العملاء' },
+  { key: 'contracts.create', label: 'إنشاء عقد' },
+  { key: 'contracts.print', label: 'طباعة عقد' },
+  { key: 'vouchers.manage', label: 'إدارة السندات' },
+  { key: 'reports.view', label: 'مشاهدة التقارير' },
+  { key: 'settings.update', label: 'تعديل الإعدادات' },
+  { key: 'users.manage', label: 'إدارة المستخدمين' },
+]
+
+const userForm = ref({
+  name: '',
+  email: '',
+  password: '',
+  role: 'sales',
+  permissions: ['properties.create', 'clients.manage'],
+})
 
 const nextPropertyCode = computed(() => {
   const next = properties.value.length + 145
@@ -217,13 +240,14 @@ const logout = async () => {
 
 const loadApiData = async () => {
   try {
-    const [serverProperties, serverClients, serverContracts, serverInstallments, serverVouchers, serverLedger] = await Promise.all([
+    const [serverProperties, serverClients, serverContracts, serverInstallments, serverVouchers, serverLedger, serverUsers] = await Promise.all([
       apiRequest('/properties'),
       apiRequest('/clients'),
       apiRequest('/contracts'),
       apiRequest('/installments'),
       apiRequest('/vouchers'),
       apiRequest('/ledger'),
+      apiRequest('/users'),
     ])
     properties.value = serverProperties
     clients.value = serverClients
@@ -231,10 +255,46 @@ const loadApiData = async () => {
     installments.value = serverInstallments
     vouchers.value = serverVouchers
     ledger.value = serverLedger
+    users.value = serverUsers
     apiOnline.value = true
   } catch {
     apiOnline.value = false
   }
+}
+
+const validateUser = () => {
+  const errors = {}
+
+  if (!userForm.value.name.trim()) errors.name = ['يرجى إدخال اسم المستخدم.']
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(userForm.value.email)) errors.email = ['يرجى إدخال بريد إلكتروني صحيح.']
+  if (userForm.value.password.length < 6) errors.password = ['كلمة المرور يجب ألا تقل عن 6 أحرف.']
+
+  userErrors.value = errors
+  return Object.keys(errors).length === 0
+}
+
+const addUser = () => {
+  if (!validateUser()) return
+
+  apiRequest('/users', {
+    method: 'POST',
+    body: JSON.stringify(userForm.value),
+  })
+    .then((createdUser) => {
+      users.value.unshift(createdUser)
+      userErrors.value = {}
+      apiOnline.value = true
+      showSuccess('تم إنشاء المستخدم وتحديد صلاحياته.')
+      userForm.value.name = ''
+      userForm.value.email = ''
+      userForm.value.password = ''
+      userForm.value.role = 'sales'
+      userForm.value.permissions = ['properties.create', 'clients.manage']
+    })
+    .catch((error) => {
+      apiOnline.value = false
+      userErrors.value = error.errors || {}
+    })
 }
 
 const validateProperty = () => {
@@ -481,16 +541,16 @@ const notifications = [
   'سند قبض جديد بقيمة 2,000,000 دينار',
 ]
 
-const permissions = [
-  'إضافة عقار',
-  'تعديل عقار',
-  'قبول عقار من عميل',
-  'طباعة عقد',
-  'إدارة السندات',
-  'مشاهدة التقارير',
-  'إدارة المستخدمين',
-  'تعديل الإعدادات',
-]
+const roleLabel = (role) =>
+  ({
+    system_admin: 'مدير النظام',
+    office_manager: 'مدير المكتب',
+    sales: 'موظف مبيعات',
+    accountant: 'محاسب',
+    data_entry: 'مدخل بيانات',
+    client: 'عميل',
+    property_supervisor: 'مشرف عقارات',
+  })[role] || role
 
 const chartBars = [
   { label: 'كانون', sales: 52, rent: 36 },
@@ -1143,12 +1203,52 @@ onMounted(loadCurrentUser)
           <div class="panel-header">
             <div>
               <p class="eyebrow">الصلاحيات</p>
-              <h2>أدوار دقيقة</h2>
+              <h2>المستخدمون والأدوار</h2>
             </div>
             <ShieldCheck :size="22" />
           </div>
-          <div class="permission-grid">
-            <span v-for="permission in permissions" :key="permission"><ChevronRight :size="15" />{{ permission }}</span>
+          <form class="smart-form user-form" @submit.prevent="addUser">
+            <label>
+              <span>الاسم</span>
+              <input v-model="userForm.name" placeholder="اسم المستخدم" />
+              <small v-if="userErrors.name" class="field-error"><AlertCircle :size="14" />{{ userErrors.name[0] }}</small>
+            </label>
+            <label>
+              <span>البريد</span>
+              <input v-model="userForm.email" type="email" placeholder="user@propify.local" />
+              <small v-if="userErrors.email" class="field-error"><AlertCircle :size="14" />{{ userErrors.email[0] }}</small>
+            </label>
+            <label>
+              <span>كلمة المرور</span>
+              <input v-model="userForm.password" type="password" placeholder="6 أحرف أو أكثر" />
+              <small v-if="userErrors.password" class="field-error"><AlertCircle :size="14" />{{ userErrors.password[0] }}</small>
+            </label>
+            <label>
+              <span>الدور</span>
+              <select v-model="userForm.role">
+                <option value="office_manager">مدير المكتب</option>
+                <option value="sales">موظف مبيعات</option>
+                <option value="accountant">محاسب</option>
+                <option value="data_entry">مدخل بيانات</option>
+                <option value="property_supervisor">مشرف عقارات</option>
+              </select>
+            </label>
+            <div class="permission-picker">
+              <label v-for="permission in availablePermissions" :key="permission.key" class="check-line">
+                <input v-model="userForm.permissions" type="checkbox" :value="permission.key" />
+                <span>{{ permission.label }}</span>
+              </label>
+            </div>
+            <button class="submit-button" type="submit"><Plus :size="18" /> إضافة مستخدم</button>
+          </form>
+          <div class="stack-list users-list">
+            <div v-for="user in users" :key="user.email" class="list-row">
+              <div>
+                <strong>{{ user.name }}</strong>
+                <span>{{ user.email }} · {{ roleLabel(user.role) }}</span>
+              </div>
+              <small>{{ user.permissions.length }} صلاحيات</small>
+            </div>
           </div>
         </article>
       </section>

@@ -694,6 +694,25 @@ th {
   background: var(--surface-2);
 }
 
+.user-form {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.permission-picker {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+}
+
+.users-list {
+  margin-top: 14px;
+}
+
 .finance-form {
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }
@@ -787,9 +806,11 @@ th {
   .content-grid,
   .operations-grid,
   .permission-grid,
+  .permission-picker,
   .smart-form,
   .finance-form,
-  .contract-form {
+  .contract-form,
+  .user-form {
     grid-template-columns: 1fr;
   }
 

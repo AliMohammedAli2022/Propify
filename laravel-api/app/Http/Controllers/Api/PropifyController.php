@@ -99,6 +99,40 @@ class PropifyController extends Controller
         ]);
     }
 
+    public function users(Request $request): JsonResponse
+    {
+        $query = User::query()->latest();
+        $this->applySearch($query, $request, ['name', 'email', 'role']);
+
+        return $this->json($query->get()->map(fn (User $user) => $this->userResource($user)));
+    }
+
+    public function storeUser(Request $request): JsonResponse
+    {
+        $validator = Validator::make($request->all(), [
+            'name' => ['required', 'string'],
+            'email' => ['required', 'email', 'unique:users,email'],
+            'password' => ['required', 'string', 'min:6'],
+            'role' => ['required', 'string'],
+            'permissions' => ['array'],
+            'permissions.*' => ['string'],
+        ], $this->messages());
+
+        if ($validator->fails()) {
+            return $this->json(['message' => 'Validation failed', 'errors' => $validator->errors()], 422);
+        }
+
+        $user = User::create([
+            'name' => $request->string('name'),
+            'email' => $request->string('email'),
+            'password' => Hash::make($request->string('password')),
+            'role' => $request->string('role'),
+            'permissions' => $request->input('permissions', []),
+        ]);
+
+        return $this->json($this->userResource($user), 201);
+    }
+
     public function properties(Request $request): JsonResponse
     {
         $query = Property::query()->latest();
@@ -359,6 +393,7 @@ class PropifyController extends Controller
             'in' => 'القيمة المختارة غير صحيحة.',
             'lte' => 'المدفوع لا يمكن أن يتجاوز قيمة العقد.',
             'email' => 'يرجى إدخال بريد إلكتروني صحيح.',
+            'unique' => 'القيمة مستخدمة مسبقاً.',
         ];
     }
 

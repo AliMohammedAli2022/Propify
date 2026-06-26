@@ -27,6 +27,34 @@ Authorization: Bearer {token}
 
 `POST /api/auth/logout`
 
+## Users
+
+`GET /api/users`
+
+`POST /api/users`
+
+```json
+{
+  "name": "موظف المبيعات",
+  "email": "sales@propify.local",
+  "password": "password",
+  "role": "sales",
+  "permissions": ["properties.create", "clients.manage"]
+}
+```
+
+Response:
+
+```json
+{
+  "id": 2,
+  "name": "موظف المبيعات",
+  "email": "sales@propify.local",
+  "role": "sales",
+  "permissions": ["properties.create", "clients.manage"]
+}
+```
+
 Response:
 
 ```json

@@ -10,6 +10,8 @@ Route::get('/auth/me', [PropifyController::class, 'me']);
 Route::post('/auth/logout', [PropifyController::class, 'logout']);
 Route::get('/health', [PropifyController::class, 'health']);
 Route::get('/dashboard', [PropifyController::class, 'dashboard']);
+Route::get('/users', [PropifyController::class, 'users']);
+Route::post('/users', [PropifyController::class, 'storeUser']);
 Route::get('/properties', [PropifyController::class, 'properties']);
 Route::post('/properties', [PropifyController::class, 'storeProperty']);
 Route::get('/clients', [PropifyController::class, 'clients']);
