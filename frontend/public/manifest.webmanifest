@@ -1,0 +1,19 @@
+{
+  "name": "Propify",
+  "short_name": "Propify",
+  "description": "منصة PWA عربية لإدارة شركات ومكاتب العقارات.",
+  "start_url": "/",
+  "display": "standalone",
+  "dir": "rtl",
+  "lang": "ar",
+  "background_color": "#f6f7fb",
+  "theme_color": "#147d73",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
