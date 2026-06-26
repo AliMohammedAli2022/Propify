@@ -42,6 +42,9 @@ const clientPageSize = 6
 const contractSort = ref({ key: 'code', direction: 'desc' })
 const contractPage = ref(1)
 const contractPageSize = 5
+const voucherSort = ref({ key: 'code', direction: 'desc' })
+const voucherPage = ref(1)
+const voucherPageSize = 6
 const apiOnline = ref(false)
 const authToken = ref(localStorage.getItem('propify.authToken') || '')
 const currentUser = ref(null)
@@ -1299,6 +1302,66 @@ const previousContractPage = () => {
   contractPage.value = Math.max(contractPage.value - 1, 1)
 }
 
+const filteredVouchers = computed(() => {
+  const query = searchQuery.value.trim().toLowerCase()
+
+  return vouchers.value.filter((voucher) => {
+    const searchable = [
+      voucher.code,
+      voucher.type,
+      voucher.client,
+      voucher.reason,
+      voucher.amount,
+      voucher.propertyCode,
+      voucher.contractCode,
+      voucher.issuedAt,
+    ]
+      .join(' ')
+      .toLowerCase()
+
+    return !query || searchable.includes(query)
+  })
+})
+
+const sortedVouchers = computed(() => {
+  const sorted = [...filteredVouchers.value]
+  const { key, direction } = voucherSort.value
+
+  return sorted.sort((a, b) => {
+    const first = key === 'amount' ? Number(a[key] || 0) : a[key]
+    const second = key === 'amount' ? Number(b[key] || 0) : b[key]
+
+    return compareValues(first, second, direction)
+  })
+})
+
+const voucherPageCount = computed(() => Math.max(1, Math.ceil(sortedVouchers.value.length / voucherPageSize)))
+const paginatedVouchers = computed(() => {
+  const start = (voucherPage.value - 1) * voucherPageSize
+  return sortedVouchers.value.slice(start, start + voucherPageSize)
+})
+
+const sortVouchers = (key) => {
+  voucherSort.value = {
+    key,
+    direction: voucherSort.value.key === key && voucherSort.value.direction === 'asc' ? 'desc' : 'asc',
+  }
+  voucherPage.value = 1
+}
+
+const voucherSortLabel = (key) => {
+  if (voucherSort.value.key !== key) return ''
+  return voucherSort.value.direction === 'asc' ? '↑' : '↓'
+}
+
+const nextVoucherPage = () => {
+  voucherPage.value = Math.min(voucherPage.value + 1, voucherPageCount.value)
+}
+
+const previousVoucherPage = () => {
+  voucherPage.value = Math.max(voucherPage.value - 1, 1)
+}
+
 const downloadFile = (filename, content, type = 'text/csv;charset=utf-8', withBom = true) => {
   const blob = new Blob([withBom ? '\ufeff' : '', content], { type })
   const url = URL.createObjectURL(blob)
@@ -1442,6 +1505,7 @@ watch([searchQuery, statusFilter], () => {
   propertyPage.value = 1
   clientPage.value = 1
   contractPage.value = 1
+  voucherPage.value = 1
 })
 
 watch(propertyPageCount, (pageCount) => {
@@ -1454,6 +1518,10 @@ watch(clientPageCount, (pageCount) => {
 
 watch(contractPageCount, (pageCount) => {
   contractPage.value = Math.min(contractPage.value, pageCount)
+})
+
+watch(voucherPageCount, (pageCount) => {
+  voucherPage.value = Math.min(voucherPage.value, pageCount)
 })
 
 const statusClass = (status) =>
@@ -1999,7 +2067,10 @@ onMounted(loadCurrentUser)
               <p class="eyebrow">الحسابات</p>
               <h2>سند قبض / سند دفع</h2>
             </div>
-            <WalletCards :size="22" />
+            <div class="panel-actions">
+              <button class="ghost-button" type="button" @click="sortVouchers('code')">الرقم {{ voucherSortLabel('code') }}</button>
+              <button class="ghost-button" type="button" @click="sortVouchers('amount')">المبلغ {{ voucherSortLabel('amount') }}</button>
+            </div>
           </div>
           <form class="smart-form finance-form" @submit.prevent="addVoucher">
             <label>
@@ -2036,7 +2107,7 @@ onMounted(loadCurrentUser)
             <button v-if="editingVoucherCode" class="text-button ghost-button" type="button" @click="resetVoucherForm">إلغاء التعديل</button>
           </form>
           <div class="stack-list vouchers-list">
-            <div v-for="voucher in vouchers.slice(0, 6)" :key="voucher.code" class="list-row">
+            <div v-for="voucher in paginatedVouchers" :key="voucher.code" class="list-row">
               <div>
                 <strong>{{ voucher.code }}</strong>
                 <span>{{ voucher.type }} · {{ voucher.client }} · {{ voucher.reason }}</span>
@@ -2049,6 +2120,19 @@ onMounted(loadCurrentUser)
                 <button class="mini-button" type="button" title="تعديل السند" @click="startEditVoucher(voucher)">ت</button>
                 <button class="mini-button danger-action" type="button" title="حذف السند" @click="deleteVoucher(voucher)">×</button>
               </div>
+            </div>
+            <p v-if="sortedVouchers.length === 0" class="empty-note">لا توجد سندات مطابقة للبحث الحالي.</p>
+          </div>
+          <div class="pagination-bar">
+            <span>عرض {{ paginatedVouchers.length }} من {{ sortedVouchers.length }} سند</span>
+            <div class="row-actions">
+              <button class="mini-button" type="button" :disabled="voucherPage === 1" @click="previousVoucherPage">
+                <ChevronRight :size="17" />
+              </button>
+              <span>{{ voucherPage }} / {{ voucherPageCount }}</span>
+              <button class="mini-button" type="button" :disabled="voucherPage === voucherPageCount" @click="nextVoucherPage">
+                <ChevronLeft :size="17" />
+              </button>
             </div>
           </div>
         </article>
