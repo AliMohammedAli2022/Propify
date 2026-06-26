@@ -60,6 +60,9 @@ const employeePageSize = 5
 const notificationSort = ref({ key: 'createdAt', direction: 'desc' })
 const notificationPage = ref(1)
 const notificationPageSize = 5
+const ledgerSort = ref({ key: 'entryDate', direction: 'desc' })
+const ledgerPage = ref(1)
+const ledgerPageSize = 6
 const apiOnline = ref(false)
 const authToken = ref(localStorage.getItem('propify.authToken') || '')
 const currentUser = ref(null)
@@ -1637,6 +1640,63 @@ const previousEmployeePage = () => {
   employeePage.value = Math.max(employeePage.value - 1, 1)
 }
 
+const filteredLedger = computed(() => {
+  const query = searchQuery.value.trim().toLowerCase()
+
+  return ledger.value.filter((entry) => {
+    const searchable = [
+      entry.code,
+      entry.direction,
+      entry.amount,
+      entry.description,
+      entry.entryDate,
+    ]
+      .join(' ')
+      .toLowerCase()
+
+    return !query || searchable.includes(query)
+  })
+})
+
+const sortedLedger = computed(() => {
+  const sorted = [...filteredLedger.value]
+  const { key, direction } = ledgerSort.value
+
+  return sorted.sort((a, b) => {
+    const first = key === 'amount' ? Number(a[key] || 0) : a[key]
+    const second = key === 'amount' ? Number(b[key] || 0) : b[key]
+
+    return compareValues(first, second, direction)
+  })
+})
+
+const ledgerPageCount = computed(() => Math.max(1, Math.ceil(sortedLedger.value.length / ledgerPageSize)))
+const paginatedLedger = computed(() => {
+  const start = (ledgerPage.value - 1) * ledgerPageSize
+  return sortedLedger.value.slice(start, start + ledgerPageSize)
+})
+
+const sortLedger = (key) => {
+  ledgerSort.value = {
+    key,
+    direction: ledgerSort.value.key === key && ledgerSort.value.direction === 'asc' ? 'desc' : 'asc',
+  }
+  ledgerPage.value = 1
+}
+
+const ledgerSortLabel = (key) => {
+  if (ledgerSort.value.key !== key) return ''
+  return ledgerSort.value.direction === 'asc' ? '↑' : '↓'
+}
+
+const nextLedgerPage = () => {
+  ledgerPage.value = Math.min(ledgerPage.value + 1, ledgerPageCount.value)
+}
+
+const previousLedgerPage = () => {
+  ledgerPage.value = Math.max(ledgerPage.value - 1, 1)
+}
+
 const downloadFile = (filename, content, type = 'text/csv;charset=utf-8', withBom = true) => {
   const blob = new Blob([withBom ? '\ufeff' : '', content], { type })
   const url = URL.createObjectURL(blob)
@@ -1785,6 +1845,7 @@ watch([searchQuery, statusFilter], () => {
   activityPage.value = 1
   userPage.value = 1
   notificationPage.value = 1
+  ledgerPage.value = 1
 })
 
 watch(propertyPageCount, (pageCount) => {
@@ -1821,6 +1882,10 @@ watch(employeePageCount, (pageCount) => {
 
 watch(notificationPageCount, (pageCount) => {
   notificationPage.value = Math.min(notificationPage.value, pageCount)
+})
+
+watch(ledgerPageCount, (pageCount) => {
+  ledgerPage.value = Math.min(ledgerPage.value, pageCount)
 })
 
 const statusClass = (status) =>
@@ -2472,12 +2537,39 @@ onMounted(loadCurrentUser)
               <p class="eyebrow">Ledger</p>
               <h2>رصيد المكتب</h2>
             </div>
-            <CircleDollarSign :size="22" />
+            <div class="panel-actions">
+              <button class="ghost-button" type="button" @click="sortLedger('entryDate')">التاريخ {{ ledgerSortLabel('entryDate') }}</button>
+              <button class="ghost-button" type="button" @click="sortLedger('amount')">المبلغ {{ ledgerSortLabel('amount') }}</button>
+            </div>
           </div>
           <div class="finance-summary">
             <div><span>الإيرادات</span><strong>{{ formatMoney(financialSummary.income) }}</strong></div>
             <div><span>المصروفات</span><strong>{{ formatMoney(financialSummary.expenses) }}</strong></div>
             <div><span>الرصيد</span><strong>{{ formatMoney(financialSummary.balance) }}</strong></div>
+          </div>
+          <div class="stack-list ledger-list">
+            <div v-for="entry in paginatedLedger" :key="entry.code" class="list-row">
+              <div>
+                <strong>{{ entry.code }}</strong>
+                <span>{{ entry.description }} · {{ entry.entryDate }}</span>
+              </div>
+              <div class="row-actions">
+                <small>{{ entry.direction === 'credit' ? 'إيراد' : 'مصروف' }} · {{ formatMoney(entry.amount) }}</small>
+              </div>
+            </div>
+            <p v-if="sortedLedger.length === 0" class="empty-note">لا توجد قيود دفتر أستاذ مطابقة للبحث الحالي.</p>
+          </div>
+          <div class="pagination-bar">
+            <span>عرض {{ paginatedLedger.length }} من {{ sortedLedger.length }} قيد</span>
+            <div class="row-actions">
+              <button class="mini-button" type="button" :disabled="ledgerPage === 1" @click="previousLedgerPage">
+                <ChevronRight :size="17" />
+              </button>
+              <span>{{ ledgerPage }} / {{ ledgerPageCount }}</span>
+              <button class="mini-button" type="button" :disabled="ledgerPage === ledgerPageCount" @click="nextLedgerPage">
+                <ChevronLeft :size="17" />
+              </button>
+            </div>
           </div>
         </article>
 
