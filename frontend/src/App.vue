@@ -139,6 +139,9 @@ const installments = ref([])
 const vouchers = ref([])
 const ledger = ref([])
 const users = ref([])
+const financialReport = ref(null)
+const propertiesReport = ref(null)
+const installmentsReport = ref(null)
 const propertyMedia = ref([])
 const mediaErrors = ref({})
 const mediaForm = ref({
@@ -263,7 +266,18 @@ const logout = async () => {
 
 const loadApiData = async () => {
   try {
-    const [serverProperties, serverClients, serverContracts, serverInstallments, serverVouchers, serverLedger, serverUsers] = await Promise.all([
+    const [
+      serverProperties,
+      serverClients,
+      serverContracts,
+      serverInstallments,
+      serverVouchers,
+      serverLedger,
+      serverUsers,
+      serverFinancialReport,
+      serverPropertiesReport,
+      serverInstallmentsReport,
+    ] = await Promise.all([
       apiRequest('/properties'),
       apiRequest('/clients'),
       apiRequest('/contracts'),
@@ -271,6 +285,9 @@ const loadApiData = async () => {
       apiRequest('/vouchers'),
       apiRequest('/ledger'),
       apiRequest('/users'),
+      apiRequest('/reports/financial'),
+      apiRequest('/reports/properties'),
+      apiRequest('/reports/installments'),
     ])
     properties.value = serverProperties
     clients.value = serverClients
@@ -279,6 +296,9 @@ const loadApiData = async () => {
     vouchers.value = serverVouchers
     ledger.value = serverLedger
     users.value = serverUsers
+    financialReport.value = serverFinancialReport
+    propertiesReport.value = serverPropertiesReport
+    installmentsReport.value = serverInstallmentsReport
     if (!mediaForm.value.propertyCode && serverProperties.length > 0) {
       mediaForm.value.propertyCode = serverProperties[0].code
       await loadPropertyMedia(serverProperties[0].code)
@@ -626,14 +646,23 @@ const roleLabel = (role) =>
     property_supervisor: 'مشرف عقارات',
   })[role] || role
 
-const chartBars = [
-  { label: 'كانون', sales: 52, rent: 36 },
-  { label: 'شباط', sales: 68, rent: 44 },
-  { label: 'آذار', sales: 57, rent: 51 },
-  { label: 'نيسان', sales: 76, rent: 48 },
-  { label: 'أيار', sales: 84, rent: 62 },
-  { label: 'حزيران', sales: 71, rent: 58 },
-]
+const chartBars = computed(() => {
+  const groups = propertiesReport.value?.byStatus?.length
+    ? propertiesReport.value.byStatus
+    : [
+      { label: 'متاح', count: properties.value.filter((property) => property.status === 'متاح').length },
+      { label: 'محجوز', count: properties.value.filter((property) => property.status === 'محجوز').length },
+      { label: 'مراجعة', count: properties.value.filter((property) => property.status !== 'متاح' && property.status !== 'محجوز').length },
+    ]
+  const max = Math.max(...groups.map((item) => item.count), 1)
+  const total = Math.max(propertiesReport.value?.total || properties.value.length || 1, 1)
+
+  return groups.map((item) => ({
+    label: item.label,
+    sales: Math.max(18, Math.round((item.count / max) * 100)),
+    rent: Math.max(18, Math.round((item.count / total) * 100)),
+  }))
+})
 
 const stats = computed(() => {
   const available = properties.value.filter((property) => property.status === 'متاح').length
@@ -1294,9 +1323,27 @@ onMounted(loadCurrentUser)
           <div class="panel-header">
             <div>
               <p class="eyebrow">التقارير</p>
-              <h2>مبيعات وإيجارات شهرية</h2>
+              <h2>ملخص مالي وتشغيلي</h2>
             </div>
             <ChevronLeft :size="22" />
+          </div>
+          <div class="report-grid">
+            <div>
+              <span>الإيرادات</span>
+              <strong>{{ formatMoney(financialReport?.income || financialSummary.income) }}</strong>
+            </div>
+            <div>
+              <span>عمولات المكتب</span>
+              <strong>{{ formatMoney(financialReport?.officeCommission || 0) }}</strong>
+            </div>
+            <div>
+              <span>قيمة العقارات</span>
+              <strong>{{ formatMoney(propertiesReport?.totalValue || 0) }}</strong>
+            </div>
+            <div>
+              <span>متبقي الأقساط</span>
+              <strong>{{ formatMoney(installmentsReport?.remainingTotal || 0) }}</strong>
+            </div>
           </div>
           <div class="chart" aria-label="مخطط مبيعات وإيجارات">
             <div v-for="bar in chartBars" :key="bar.label" class="chart-column">

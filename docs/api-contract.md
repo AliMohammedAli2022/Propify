@@ -221,6 +221,14 @@ Response:
 - `to`
 - `status`
 - `export=xlsx`
+
+Implemented report responses:
+
+- `financial`: `income`, `expenses`, `balance`, `contractsTotal`, `contractsPaid`, `contractsDue`, `officeCommission`, `vouchersCount`.
+- `properties`: `total`, `totalValue`, `byStatus`, `byMode`, `byProvince`.
+- `installments`: `total`, `amountTotal`, `paidTotal`, `remainingTotal`, `byStatus`, `upcoming`.
+- `employee-performance`: `usersTotal`, `byRole`, `users`.
+
 ## Property Media
 
 `GET /api/properties/{code}/media`

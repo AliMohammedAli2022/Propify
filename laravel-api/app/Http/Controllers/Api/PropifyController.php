@@ -382,6 +382,83 @@ class PropifyController extends Controller
         );
     }
 
+    public function financialReport(Request $request): JsonResponse
+    {
+        $ledgerQuery = LedgerEntry::query();
+        $this->applyDateRange($ledgerQuery, $request, 'entry_date');
+
+        $entries = $ledgerQuery->get();
+        $income = (float) $entries->where('direction', 'credit')->sum('amount');
+        $expenses = (float) $entries->where('direction', 'debit')->sum('amount');
+
+        return $this->json([
+            'income' => $income,
+            'expenses' => $expenses,
+            'balance' => $income - $expenses,
+            'contractsTotal' => (float) Contract::sum('total'),
+            'contractsPaid' => (float) Contract::sum('paid'),
+            'contractsDue' => (float) Contract::sum('due'),
+            'officeCommission' => (float) Contract::sum('commission'),
+            'vouchersCount' => Voucher::count(),
+        ]);
+    }
+
+    public function propertiesReport(Request $request): JsonResponse
+    {
+        $query = Property::query();
+
+        if ($request->filled('status') && $request->query('status') !== 'الكل') {
+            $query->where('status', $request->query('status'));
+        }
+
+        $properties = $query->get();
+
+        return $this->json([
+            'total' => $properties->count(),
+            'totalValue' => (float) $properties->sum('price'),
+            'byStatus' => $this->groupCounts($properties, 'status'),
+            'byMode' => $this->groupCounts($properties, 'mode'),
+            'byProvince' => $this->groupCounts($properties, 'province'),
+        ]);
+    }
+
+    public function installmentsReport(Request $request): JsonResponse
+    {
+        $query = Installment::query()->orderBy('due_date');
+        $this->applyDateRange($query, $request, 'due_date');
+
+        if ($request->filled('status') && $request->query('status') !== 'الكل') {
+            $query->where('status', $request->query('status'));
+        }
+
+        $installments = $query->get();
+
+        return $this->json([
+            'total' => $installments->count(),
+            'amountTotal' => (float) $installments->sum('amount'),
+            'paidTotal' => (float) $installments->sum('paid_amount'),
+            'remainingTotal' => (float) ($installments->sum('amount') - $installments->sum('paid_amount')),
+            'byStatus' => $this->groupCounts($installments, 'status'),
+            'upcoming' => $installments->take(8)->map(fn (Installment $installment) => $this->installmentResource($installment))->values(),
+        ]);
+    }
+
+    public function employeePerformanceReport(): JsonResponse
+    {
+        $users = User::query()->latest()->get();
+
+        return $this->json([
+            'usersTotal' => $users->count(),
+            'byRole' => $this->groupCounts($users, 'role'),
+            'users' => $users->map(fn (User $user) => [
+                'id' => $user->id,
+                'name' => $user->name,
+                'role' => $user->role,
+                'permissionsCount' => count($user->permissions ?? []),
+            ])->values(),
+        ]);
+    }
+
     private function json(mixed $data, int $status = 200): JsonResponse
     {
         return response()->json($data, $status)->withHeaders([
@@ -403,6 +480,25 @@ class PropifyController extends Controller
                 $builder->orWhere($column, 'like', "%{$search}%");
             }
         });
+    }
+
+    private function applyDateRange($query, Request $request, string $column): void
+    {
+        if ($request->filled('from')) {
+            $query->whereDate($column, '>=', $request->query('from'));
+        }
+
+        if ($request->filled('to')) {
+            $query->whereDate($column, '<=', $request->query('to'));
+        }
+    }
+
+    private function groupCounts($collection, string $key)
+    {
+        return $collection
+            ->groupBy($key)
+            ->map(fn ($items, $label) => ['label' => (string) $label, 'count' => $items->count()])
+            ->values();
     }
 
     private function nextCode(string $model, string $prefix, int $start): string
