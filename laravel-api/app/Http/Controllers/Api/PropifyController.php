@@ -15,6 +15,7 @@ use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Str;
 
@@ -180,6 +181,43 @@ class PropifyController extends Controller
         ]);
 
         return $this->json($this->propertyResource($property), 201);
+    }
+
+    public function updateProperty(Request $request, Property $property): JsonResponse
+    {
+        $validator = Validator::make($request->all(), $this->propertyRules(), $this->messages());
+
+        if ($validator->fails()) {
+            return $this->json(['message' => 'Validation failed', 'errors' => $validator->errors()], 422);
+        }
+
+        $property->update($this->propertyData($request));
+
+        return $this->json($this->propertyResource($property->refresh()));
+    }
+
+    public function approveProperty(Property $property): JsonResponse
+    {
+        $property->update(['status' => 'متاح']);
+
+        return $this->json($this->propertyResource($property->refresh()));
+    }
+
+    public function deleteProperty(Property $property): JsonResponse
+    {
+        if (Contract::where('property_code', $property->code)->exists()) {
+            return $this->json([
+                'message' => 'لا يمكن حذف عقار مرتبط بعقد.',
+                'errors' => ['property' => ['لا يمكن حذف عقار مرتبط بعقد.']],
+            ], 409);
+        }
+
+        $media = PropertyMedia::where('property_code', $property->code)->get();
+        $media->each(fn (PropertyMedia $item) => Storage::disk('public')->delete($item->path));
+        PropertyMedia::where('property_code', $property->code)->delete();
+        $property->delete();
+
+        return $this->json(['ok' => true]);
     }
 
     public function propertyMedia(Property $property): JsonResponse
@@ -532,7 +570,7 @@ class PropifyController extends Controller
     {
         return response()->json($data, $status)->withHeaders([
             'Access-Control-Allow-Origin' => '*',
-            'Access-Control-Allow-Methods' => 'GET, POST, OPTIONS',
+            'Access-Control-Allow-Methods' => 'GET, POST, PUT, PATCH, DELETE, OPTIONS',
             'Access-Control-Allow-Headers' => 'Content-Type, Authorization',
         ]);
     }
@@ -549,6 +587,38 @@ class PropifyController extends Controller
                 $builder->orWhere($column, 'like', "%{$search}%");
             }
         });
+    }
+
+    private function propertyRules(): array
+    {
+        return [
+            'type' => ['required', 'string'],
+            'mode' => ['required', 'string'],
+            'province' => ['nullable', 'string'],
+            'area' => ['required', 'string'],
+            'space' => ['required', 'numeric', 'gt:0'],
+            'rooms' => ['nullable', 'integer', 'min:0'],
+            'price' => ['required'],
+            'owner' => ['required', 'string'],
+            'status' => ['nullable', 'string'],
+            'negotiable' => ['boolean'],
+        ];
+    }
+
+    private function propertyData(Request $request): array
+    {
+        return [
+            'type' => $request->string('type'),
+            'mode' => $request->string('mode'),
+            'province' => $request->input('province', 'بغداد'),
+            'area' => $request->string('area'),
+            'space' => $request->input('space'),
+            'rooms' => $request->integer('rooms'),
+            'price' => $this->money($request->input('price')),
+            'status' => $request->input('status', 'قيد المراجعة'),
+            'owner' => $request->string('owner'),
+            'negotiable' => $request->boolean('negotiable', true),
+        ];
     }
 
     private function applyDateRange($query, Request $request, string $column): void

@@ -120,6 +120,7 @@ const propertyForm = ref({
   negotiable: true,
   status: 'قيد المراجعة',
 })
+const editingPropertyCode = ref('')
 
 const clientForm = ref({
   name: '',
@@ -412,12 +413,38 @@ const validateProperty = () => {
   return Object.keys(errors).length === 0
 }
 
+const resetPropertyForm = () => {
+  propertyForm.value.area = ''
+  propertyForm.value.space = ''
+  propertyForm.value.rooms = ''
+  propertyForm.value.price = ''
+  propertyForm.value.owner = ''
+  propertyForm.value.status = 'قيد المراجعة'
+  propertyForm.value.negotiable = true
+  editingPropertyCode.value = ''
+}
+
+const startEditProperty = (property) => {
+  editingPropertyCode.value = property.code
+  propertyForm.value.type = property.type
+  propertyForm.value.mode = property.mode
+  propertyForm.value.province = property.province || 'بغداد'
+  propertyForm.value.area = property.area
+  propertyForm.value.space = property.space
+  propertyForm.value.rooms = property.rooms || ''
+  propertyForm.value.price = String(property.price || '').replaceAll(',', '')
+  propertyForm.value.owner = property.owner
+  propertyForm.value.status = property.status
+  propertyForm.value.negotiable = property.negotiable ?? true
+  activeSection.value = 'properties'
+  showSuccess(`تم تحميل بيانات العقار ${property.code} للتعديل.`)
+}
+
 const addProperty = () => {
   if (!validateProperty()) return
 
   const price = Number(String(propertyForm.value.price).replaceAll(',', ''))
   const payload = {
-    code: nextPropertyCode.value,
     type: propertyForm.value.type,
     mode: propertyForm.value.mode,
     province: propertyForm.value.province,
@@ -429,15 +456,22 @@ const addProperty = () => {
     owner: propertyForm.value.owner,
     negotiable: propertyForm.value.negotiable,
   }
+  const endpoint = editingPropertyCode.value ? `/properties/${editingPropertyCode.value}` : '/properties'
+  const method = editingPropertyCode.value ? 'PUT' : 'POST'
 
-  apiRequest('/properties', {
-    method: 'POST',
+  apiRequest(endpoint, {
+    method,
     body: JSON.stringify(payload),
   })
     .then((createdProperty) => {
-      properties.value.unshift(createdProperty)
+      if (editingPropertyCode.value) {
+        properties.value = properties.value.map((property) => (property.code === createdProperty.code ? createdProperty : property))
+      } else {
+        properties.value.unshift(createdProperty)
+      }
       apiOnline.value = true
-      showSuccess('تمت إضافة العقار وحفظه في API.')
+      showSuccess(editingPropertyCode.value ? 'تم تحديث بيانات العقار.' : 'تمت إضافة العقار وحفظه في API.')
+      resetPropertyForm()
     })
     .catch((error) => {
       apiOnline.value = false
@@ -445,15 +479,42 @@ const addProperty = () => {
         propertyErrors.value = error.errors
         return
       }
-      properties.value.unshift(payload)
-      showSuccess('تمت إضافة العقار محلياً. شغّل API لحفظه في السيرفر.')
+      if (!editingPropertyCode.value) {
+        properties.value.unshift({ ...payload, code: nextPropertyCode.value })
+        showSuccess('تمت إضافة العقار محلياً. شغّل API لحفظه في السيرفر.')
+      }
     })
+}
 
-  propertyForm.value.area = ''
-  propertyForm.value.space = ''
-  propertyForm.value.rooms = ''
-  propertyForm.value.price = ''
-  propertyForm.value.owner = ''
+const approveProperty = (property) => {
+  apiRequest(`/properties/${property.code}/approve`, { method: 'POST' })
+    .then((approvedProperty) => {
+      properties.value = properties.value.map((item) => (item.code === approvedProperty.code ? approvedProperty : item))
+      apiOnline.value = true
+      showSuccess(`تم اعتماد العقار ${property.code}.`)
+      return loadApiData()
+    })
+    .catch((error) => {
+      apiOnline.value = false
+      propertyErrors.value = error.errors || {}
+    })
+}
+
+const deleteProperty = (property) => {
+  if (!window.confirm(`هل تريد حذف العقار ${property.code}؟`)) return
+
+  apiRequest(`/properties/${property.code}`, { method: 'DELETE' })
+    .then(() => {
+      properties.value = properties.value.filter((item) => item.code !== property.code)
+      apiOnline.value = true
+      showSuccess(`تم حذف العقار ${property.code}.`)
+      return loadApiData()
+    })
+    .catch((error) => {
+      apiOnline.value = false
+      const message = error.errors?.property?.[0] || 'تعذر حذف العقار.'
+      showSuccess(message)
+    })
 }
 
 const validateClient = () => {
@@ -999,7 +1060,8 @@ onMounted(loadCurrentUser)
               <input v-model="propertyForm.negotiable" type="checkbox" />
               <span>السعر قابل للتفاوض</span>
             </label>
-            <button class="submit-button" type="submit"><Plus :size="18" /> إضافة العقار</button>
+            <button class="submit-button" type="submit"><Plus :size="18" /> {{ editingPropertyCode ? 'حفظ التعديل' : 'إضافة العقار' }}</button>
+            <button v-if="editingPropertyCode" class="text-button ghost-button" type="button" @click="resetPropertyForm">إلغاء التعديل</button>
           </form>
         </article>
 
@@ -1187,6 +1249,7 @@ onMounted(loadCurrentUser)
                   <th>الحالة</th>
                   <th>الملفات</th>
                   <th>المالك</th>
+                  <th>الإجراءات</th>
                 </tr>
               </thead>
               <tbody>
@@ -1199,9 +1262,16 @@ onMounted(loadCurrentUser)
                   <td><span class="badge" :class="statusClass(property.status)">{{ property.status }}</span></td>
                   <td>{{ property.mediaCount || 0 }}</td>
                   <td>{{ property.owner }}</td>
+                  <td>
+                    <div class="row-actions">
+                      <button class="mini-button" type="button" title="تعديل" @click="startEditProperty(property)">ت</button>
+                      <button class="mini-button" type="button" title="اعتماد" @click="approveProperty(property)">✓</button>
+                      <button class="mini-button danger-action" type="button" title="حذف" @click="deleteProperty(property)">×</button>
+                    </div>
+                  </td>
                 </tr>
                 <tr v-if="filteredProperties.length === 0">
-                  <td colspan="8" class="empty-cell">لا توجد عقارات مطابقة للبحث أو الفلتر الحالي.</td>
+                  <td colspan="9" class="empty-cell">لا توجد عقارات مطابقة للبحث أو الفلتر الحالي.</td>
                 </tr>
               </tbody>
             </table>

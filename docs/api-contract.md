@@ -91,6 +91,12 @@ Response:
 
 `POST /api/properties`
 
+`PUT /api/properties/{code}`
+
+`DELETE /api/properties/{code}`
+
+`POST /api/properties/{code}/approve`
+
 ```json
 {
   "type": "دار سكنية",

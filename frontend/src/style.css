@@ -652,6 +652,15 @@ th {
   background: var(--surface);
 }
 
+.row-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.danger-action {
+  color: var(--danger);
+}
+
 .list-row div,
 .contract-card div {
   display: grid;
