@@ -8,6 +8,7 @@ use App\Models\Contract;
 use App\Models\Installment;
 use App\Models\LedgerEntry;
 use App\Models\Property;
+use App\Models\PropertyMedia;
 use App\Models\User;
 use App\Models\Voucher;
 use Carbon\Carbon;
@@ -179,6 +180,47 @@ class PropifyController extends Controller
         ]);
 
         return $this->json($this->propertyResource($property), 201);
+    }
+
+    public function propertyMedia(Property $property): JsonResponse
+    {
+        return $this->json(
+            PropertyMedia::query()
+                ->where('property_code', $property->code)
+                ->latest()
+                ->get()
+                ->map(fn (PropertyMedia $media) => $this->mediaResource($media))
+        );
+    }
+
+    public function storePropertyMedia(Request $request, Property $property): JsonResponse
+    {
+        $validator = Validator::make($request->all(), [
+            'files' => ['required', 'array', 'max:20'],
+            'files.*' => ['file', 'max:5120', 'mimes:jpg,jpeg,png,webp,pdf,doc,docx'],
+        ], $this->messages());
+
+        if ($validator->fails()) {
+            return $this->json(['message' => 'Validation failed', 'errors' => $validator->errors()], 422);
+        }
+
+        $created = collect($request->file('files'))->map(function ($file) use ($property) {
+            $path = $file->store("properties/{$property->code}", 'public');
+            $mime = $file->getClientMimeType();
+
+            $media = PropertyMedia::create([
+                'property_code' => $property->code,
+                'kind' => Str::startsWith($mime, 'image/') ? 'image' : 'document',
+                'path' => $path,
+                'original_name' => $file->getClientOriginalName(),
+                'mime_type' => $mime,
+                'size' => $file->getSize(),
+            ]);
+
+            return $this->mediaResource($media);
+        });
+
+        return $this->json($created, 201);
     }
 
     public function clients(Request $request): JsonResponse
@@ -394,6 +436,9 @@ class PropifyController extends Controller
             'lte' => 'المدفوع لا يمكن أن يتجاوز قيمة العقد.',
             'email' => 'يرجى إدخال بريد إلكتروني صحيح.',
             'unique' => 'القيمة مستخدمة مسبقاً.',
+            'file' => 'يرجى اختيار ملف صحيح.',
+            'mimes' => 'نوع الملف غير مدعوم.',
+            'max' => 'القيمة تتجاوز الحد المسموح.',
         ];
     }
 
@@ -434,6 +479,21 @@ class PropifyController extends Controller
             'status' => $property->status,
             'owner' => $property->owner,
             'negotiable' => (bool) $property->negotiable,
+            'mediaCount' => PropertyMedia::where('property_code', $property->code)->count(),
+        ];
+    }
+
+    private function mediaResource(PropertyMedia $media): array
+    {
+        return [
+            'id' => $media->id,
+            'propertyCode' => $media->property_code,
+            'kind' => $media->kind,
+            'name' => $media->original_name,
+            'mimeType' => $media->mime_type,
+            'size' => $media->size,
+            'url' => asset('storage/'.$media->path),
+            'createdAt' => $media->created_at?->toDateTimeString(),
         ];
     }
 

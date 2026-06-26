@@ -72,3 +72,8 @@ npm run build
 ## ملاحظات
 
 لم يتم توليد مشروع Laravel محلياً لأن PHP وComposer غير مثبتين في البيئة الحالية. عند توفرهما، اتبع [Backend Blueprint](docs/backend-blueprint.md)، وراجع [Database Schema](docs/database-schema.sql)، و[API Contract](docs/api-contract.md) لإنشاء API وربطه بالواجهة.
+## Property Media
+
+- Property records can now store uploaded images and documents through the Laravel API.
+- Files are saved on the Laravel `public` disk and exposed through `public/storage`.
+- Supported upload types: `jpg`, `jpeg`, `png`, `webp`, `pdf`, `doc`, `docx`.

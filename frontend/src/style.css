@@ -519,6 +519,36 @@ h2 {
   grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
+.media-form {
+  grid-template-columns: 1fr 1.4fr auto;
+}
+
+.media-list {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.media-list a,
+.empty-note {
+  min-height: 42px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  color: var(--text);
+  background: var(--surface-2);
+  text-decoration: none;
+}
+
+.media-list small,
+.empty-note {
+  color: var(--muted);
+}
+
 .text-button {
   min-height: 38px;
   display: inline-flex;
@@ -810,6 +840,8 @@ th {
   .smart-form,
   .finance-form,
   .contract-form,
+  .media-form,
+  .media-list,
   .user-form {
     grid-template-columns: 1fr;
   }

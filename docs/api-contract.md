@@ -221,3 +221,22 @@ Response:
 - `to`
 - `status`
 - `export=xlsx`
+## Property Media
+
+`GET /api/properties/{code}/media`
+
+Returns uploaded files for one property.
+
+`POST /api/properties/{code}/media`
+
+Request:
+
+```text
+Content-Type: multipart/form-data
+files[]: jpg,jpeg,png,webp,pdf,doc,docx
+```
+
+Limits:
+
+- Up to 20 files per request.
+- Up to 5MB per file.

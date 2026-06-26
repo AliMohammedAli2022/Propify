@@ -14,6 +14,8 @@ Route::get('/users', [PropifyController::class, 'users']);
 Route::post('/users', [PropifyController::class, 'storeUser']);
 Route::get('/properties', [PropifyController::class, 'properties']);
 Route::post('/properties', [PropifyController::class, 'storeProperty']);
+Route::get('/properties/{property:code}/media', [PropifyController::class, 'propertyMedia']);
+Route::post('/properties/{property:code}/media', [PropifyController::class, 'storePropertyMedia']);
 Route::get('/clients', [PropifyController::class, 'clients']);
 Route::post('/clients', [PropifyController::class, 'storeClient']);
 Route::get('/contracts', [PropifyController::class, 'contracts']);

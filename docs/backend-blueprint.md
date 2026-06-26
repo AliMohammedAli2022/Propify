@@ -73,3 +73,8 @@ php artisan make:model Contract -mcr
 php artisan make:model Voucher -mcr
 php artisan make:model LedgerEntry -m
 ```
+## Property Media Storage
+
+- `property_media` stores uploaded property images and documents.
+- Files are saved to the Laravel `public` disk under `properties/{propertyCode}`.
+- Run `php artisan storage:link` after deployment so URLs under `/storage/...` resolve correctly.

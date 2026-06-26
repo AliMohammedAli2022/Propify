@@ -139,6 +139,12 @@ const installments = ref([])
 const vouchers = ref([])
 const ledger = ref([])
 const users = ref([])
+const propertyMedia = ref([])
+const mediaErrors = ref({})
+const mediaForm = ref({
+  propertyCode: '',
+  files: [],
+})
 
 const iraqiPhonePattern = /^(075|077|078|079)[0-9]{8}$/
 const nationalIdPattern = /^[A-Za-z0-9]{12,}$/
@@ -188,6 +194,23 @@ const apiRequest = async (path, options = {}) => {
   const data = await response.json()
   if (!response.ok) {
     const error = new Error(data.message || 'API request failed')
+    error.errors = data.errors || {}
+    throw error
+  }
+  return data
+}
+
+const apiUpload = async (path, formData) => {
+  const response = await fetch(`${API_BASE_URL}${path}`, {
+    method: 'POST',
+    headers: {
+      ...(authToken.value ? { Authorization: `Bearer ${authToken.value}` } : {}),
+    },
+    body: formData,
+  })
+  const data = await response.json()
+  if (!response.ok) {
+    const error = new Error(data.message || 'API upload failed')
     error.errors = data.errors || {}
     throw error
   }
@@ -256,10 +279,61 @@ const loadApiData = async () => {
     vouchers.value = serverVouchers
     ledger.value = serverLedger
     users.value = serverUsers
+    if (!mediaForm.value.propertyCode && serverProperties.length > 0) {
+      mediaForm.value.propertyCode = serverProperties[0].code
+      await loadPropertyMedia(serverProperties[0].code)
+    }
     apiOnline.value = true
   } catch {
     apiOnline.value = false
   }
+}
+
+const loadPropertyMedia = async (propertyCode = mediaForm.value.propertyCode) => {
+  if (!propertyCode) return
+
+  try {
+    propertyMedia.value = await apiRequest(`/properties/${propertyCode}/media`)
+    apiOnline.value = true
+  } catch {
+    propertyMedia.value = []
+    apiOnline.value = false
+  }
+}
+
+const onMediaFilesChange = (event) => {
+  mediaForm.value.files = Array.from(event.target.files || [])
+}
+
+const uploadPropertyMedia = () => {
+  mediaErrors.value = {}
+
+  if (!mediaForm.value.propertyCode) {
+    mediaErrors.value.propertyCode = ['يرجى اختيار العقار.']
+    return
+  }
+
+  if (mediaForm.value.files.length === 0) {
+    mediaErrors.value.files = ['يرجى اختيار صورة أو مستند.']
+    return
+  }
+
+  const formData = new FormData()
+  mediaForm.value.files.forEach((file) => formData.append('files[]', file))
+
+  apiUpload(`/properties/${mediaForm.value.propertyCode}/media`, formData)
+    .then((createdMedia) => {
+      propertyMedia.value = [...createdMedia, ...propertyMedia.value]
+      mediaForm.value.files = []
+      mediaErrors.value = {}
+      apiOnline.value = true
+      showSuccess('تم رفع ملفات العقار بنجاح.')
+      return loadApiData()
+    })
+    .catch((error) => {
+      apiOnline.value = false
+      mediaErrors.value = error.errors || {}
+    })
 }
 
 const validateUser = () => {
@@ -937,6 +1011,40 @@ onMounted(loadCurrentUser)
         <article class="panel form-panel wide-operation">
           <div class="panel-header">
             <div>
+              <p class="eyebrow">ملفات العقار</p>
+              <h2>رفع صور ومستندات</h2>
+            </div>
+            <Building2 :size="22" />
+          </div>
+          <form class="smart-form media-form" @submit.prevent="uploadPropertyMedia">
+            <label>
+              <span>العقار</span>
+              <select v-model="mediaForm.propertyCode" @change="loadPropertyMedia()">
+                <option value="">اختر العقار</option>
+                <option v-for="property in properties" :key="property.code" :value="property.code">{{ property.code }} · {{ property.area }}</option>
+              </select>
+              <small v-if="mediaErrors.propertyCode" class="field-error"><AlertCircle :size="14" />{{ mediaErrors.propertyCode[0] }}</small>
+            </label>
+            <label>
+              <span>الملفات</span>
+              <input type="file" multiple accept=".jpg,.jpeg,.png,.webp,.pdf,.doc,.docx" @change="onMediaFilesChange" />
+              <small v-if="mediaErrors.files" class="field-error"><AlertCircle :size="14" />{{ mediaErrors.files[0] }}</small>
+            </label>
+            <button class="submit-button" type="submit"><Plus :size="18" /> رفع الملفات</button>
+          </form>
+          <div class="media-list">
+            <a v-for="media in propertyMedia" :key="media.id" :href="media.url" target="_blank" rel="noreferrer">
+              <FileText :size="17" />
+              <span>{{ media.name }}</span>
+              <small>{{ media.kind === 'image' ? 'صورة' : 'مستند' }}</small>
+            </a>
+            <p v-if="mediaForm.propertyCode && propertyMedia.length === 0" class="empty-note">لا توجد ملفات مرفوعة لهذا العقار بعد.</p>
+          </div>
+        </article>
+
+        <article class="panel form-panel wide-operation">
+          <div class="panel-header">
+            <div>
               <p class="eyebrow">العقود والتقسيط</p>
               <h2>إنشاء عقد جديد</h2>
             </div>
@@ -1023,6 +1131,7 @@ onMounted(loadCurrentUser)
                   <th>المنطقة</th>
                   <th>السعر / دينار</th>
                   <th>الحالة</th>
+                  <th>الملفات</th>
                   <th>المالك</th>
                 </tr>
               </thead>
@@ -1034,10 +1143,11 @@ onMounted(loadCurrentUser)
                   <td>{{ property.area }}</td>
                   <td>{{ property.price }}</td>
                   <td><span class="badge" :class="statusClass(property.status)">{{ property.status }}</span></td>
+                  <td>{{ property.mediaCount || 0 }}</td>
                   <td>{{ property.owner }}</td>
                 </tr>
                 <tr v-if="filteredProperties.length === 0">
-                  <td colspan="7" class="empty-cell">لا توجد عقارات مطابقة للبحث أو الفلتر الحالي.</td>
+                  <td colspan="8" class="empty-cell">لا توجد عقارات مطابقة للبحث أو الفلتر الحالي.</td>
                 </tr>
               </tbody>
             </table>
