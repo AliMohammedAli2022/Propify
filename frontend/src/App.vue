@@ -57,6 +57,9 @@ const navItems = [
   { id: 'settings', label: 'الإعدادات', icon: Settings },
 ]
 
+const activeSectionLabel = computed(() => navItems.find((item) => item.id === activeSection.value)?.label || 'Propify')
+const showSection = (...sections) => sections.includes(activeSection.value)
+
 const propertySeeds = [
   {
     code: 'PR-2026-000145',
@@ -896,7 +899,7 @@ onMounted(loadCurrentUser)
       <header class="topbar">
         <div>
           <p class="eyebrow">Propify Real Estate OS</p>
-          <h1>إدارة أعمالك العقارية من مكان واحد</h1>
+          <h1>{{ activeSectionLabel }}</h1>
         </div>
         <div class="toolbar">
           <label class="search">
@@ -922,7 +925,7 @@ onMounted(loadCurrentUser)
         <span>نتمنى لك يوماً موفقاً في إدارة أعمالك العقارية</span>
       </section>
 
-      <section class="stats-grid" aria-label="ملخص المؤشرات">
+      <section v-if="showSection('dashboard')" class="stats-grid" aria-label="ملخص المؤشرات">
         <article v-for="stat in stats" :key="stat.label" class="stat-card">
           <div class="stat-icon"><component :is="stat.icon" :size="22" /></div>
           <span>{{ stat.label }}</span>
@@ -936,8 +939,8 @@ onMounted(loadCurrentUser)
         <span>{{ successMessage }}</span>
       </section>
 
-      <section class="operations-grid">
-        <article class="panel form-panel">
+      <section v-if="showSection('properties', 'clients', 'contracts')" class="operations-grid">
+        <article v-if="showSection('properties')" class="panel form-panel">
           <div class="panel-header">
             <div>
               <p class="eyebrow">إدارة العقارات</p>
@@ -1000,7 +1003,7 @@ onMounted(loadCurrentUser)
           </form>
         </article>
 
-        <article class="panel form-panel">
+        <article v-if="showSection('clients')" class="panel form-panel">
           <div class="panel-header">
             <div>
               <p class="eyebrow">CRM</p>
@@ -1059,7 +1062,7 @@ onMounted(loadCurrentUser)
           </form>
         </article>
 
-        <article class="panel form-panel wide-operation">
+        <article v-if="showSection('properties')" class="panel form-panel wide-operation">
           <div class="panel-header">
             <div>
               <p class="eyebrow">ملفات العقار</p>
@@ -1093,7 +1096,7 @@ onMounted(loadCurrentUser)
           </div>
         </article>
 
-        <article class="panel form-panel wide-operation">
+        <article v-if="showSection('contracts')" class="panel form-panel wide-operation">
           <div class="panel-header">
             <div>
               <p class="eyebrow">العقود والتقسيط</p>
@@ -1159,7 +1162,7 @@ onMounted(loadCurrentUser)
       </section>
 
       <section class="content-grid">
-        <article class="panel wide">
+        <article v-if="showSection('dashboard', 'properties')" class="panel wide">
           <div class="panel-header">
             <div>
               <p class="eyebrow">العقارات</p>
@@ -1205,7 +1208,7 @@ onMounted(loadCurrentUser)
           </div>
         </article>
 
-        <article class="panel">
+        <article v-if="showSection('dashboard', 'clients')" class="panel">
           <div class="panel-header">
             <div>
               <p class="eyebrow">CRM</p>
@@ -1224,7 +1227,7 @@ onMounted(loadCurrentUser)
           </div>
         </article>
 
-        <article class="panel">
+        <article v-if="showSection('dashboard')" class="panel">
           <div class="panel-header">
             <div>
               <p class="eyebrow">الإشعارات</p>
@@ -1244,7 +1247,7 @@ onMounted(loadCurrentUser)
           </div>
         </article>
 
-        <article class="panel wide">
+        <article v-if="showSection('dashboard', 'contracts')" class="panel wide">
           <div class="panel-header">
             <div>
               <p class="eyebrow">العقود</p>
@@ -1271,7 +1274,7 @@ onMounted(loadCurrentUser)
           </div>
         </article>
 
-        <article class="panel wide">
+        <article v-if="showSection('finance')" class="panel wide">
           <div class="panel-header">
             <div>
               <p class="eyebrow">الحسابات</p>
@@ -1314,7 +1317,7 @@ onMounted(loadCurrentUser)
           </form>
         </article>
 
-        <article class="panel">
+        <article v-if="showSection('dashboard', 'finance')" class="panel">
           <div class="panel-header">
             <div>
               <p class="eyebrow">Ledger</p>
@@ -1329,7 +1332,7 @@ onMounted(loadCurrentUser)
           </div>
         </article>
 
-        <article class="panel">
+        <article v-if="showSection('dashboard', 'contracts')" class="panel">
           <div class="panel-header">
             <div>
               <p class="eyebrow">الأقساط</p>
@@ -1348,7 +1351,7 @@ onMounted(loadCurrentUser)
           </div>
         </article>
 
-        <article class="panel">
+        <article v-if="showSection('dashboard', 'reports')" class="panel">
           <div class="panel-header">
             <div>
               <p class="eyebrow">التقارير</p>
@@ -1385,7 +1388,7 @@ onMounted(loadCurrentUser)
           </div>
         </article>
 
-        <article class="panel">
+        <article v-if="showSection('permissions')" class="panel">
           <div class="panel-header">
             <div>
               <p class="eyebrow">الصلاحيات</p>
@@ -1434,6 +1437,42 @@ onMounted(loadCurrentUser)
                 <span>{{ user.email }} · {{ roleLabel(user.role) }}</span>
               </div>
               <small>{{ user.permissions.length }} صلاحيات</small>
+            </div>
+          </div>
+        </article>
+
+        <article v-if="showSection('settings')" class="panel">
+          <div class="panel-header">
+            <div>
+              <p class="eyebrow">الإعدادات</p>
+              <h2>حالة النظام</h2>
+            </div>
+            <Settings :size="22" />
+          </div>
+          <div class="stack-list">
+            <div class="list-row">
+              <div>
+                <strong>واجهة API</strong>
+                <span>{{ API_BASE_URL }}</span>
+              </div>
+              <small>{{ apiOnline ? 'متصل' : 'غير متصل' }}</small>
+            </div>
+            <div class="list-row">
+              <div>
+                <strong>المستخدم الحالي</strong>
+                <span>{{ currentUser?.email }} · {{ roleLabel(currentUser?.role) }}</span>
+              </div>
+              <small>{{ currentUser?.permissions?.length || 0 }} صلاحيات</small>
+            </div>
+            <div class="list-row">
+              <div>
+                <strong>المظهر</strong>
+                <span>{{ darkMode ? 'داكن' : 'فاتح' }}</span>
+              </div>
+              <button class="mini-button" type="button" :title="darkMode ? 'الثيم الفاتح' : 'الثيم الداكن'" @click="darkMode = !darkMode">
+                <Sun v-if="darkMode" :size="17" />
+                <Moon v-else :size="17" />
+              </button>
             </div>
           </div>
         </article>
