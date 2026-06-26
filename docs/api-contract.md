@@ -123,6 +123,8 @@ Expected behavior:
 
 ## Vouchers
 
+`GET /api/vouchers`
+
 `POST /api/vouchers`
 
 ```json
@@ -141,6 +143,31 @@ Expected behavior:
 
 - إنشاء سند قبض أو دفع.
 - إنشاء قيد Ledger مرتبط بالسند.
+
+## Installments
+
+`GET /api/installments`
+
+Response:
+
+```json
+[
+  {
+    "contractCode": "CT-2026-000045",
+    "number": 1,
+    "dueDate": "2026-07-01",
+    "amount": 5000000,
+    "paidAmount": 0,
+    "status": "مستحق"
+  }
+]
+```
+
+## Ledger
+
+`GET /api/ledger`
+
+يعيد قيود الدفتر المالي المبسط الناتجة من السندات.
 
 ## Reports
 

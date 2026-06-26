@@ -23,6 +23,12 @@ http://127.0.0.1:8787/api
 - `POST /api/properties`
 - `GET /api/clients`
 - `POST /api/clients`
+- `GET /api/contracts`
+- `POST /api/contracts`
+- `GET /api/installments`
+- `GET /api/vouchers`
+- `POST /api/vouchers`
+- `GET /api/ledger`
 
 البيانات تحفظ في:
 

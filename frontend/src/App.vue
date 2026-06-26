@@ -122,8 +122,13 @@ const clientForm = ref({
 
 const propertyErrors = ref({})
 const clientErrors = ref({})
+const voucherErrors = ref({})
 const successMessage = ref('')
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8787/api'
+const contracts = ref([])
+const installments = ref([])
+const vouchers = ref([])
+const ledger = ref([])
 
 const iraqiPhonePattern = /^(075|077|078|079)[0-9]{8}$/
 const nationalIdPattern = /^[A-Za-z0-9]{12,}$/
@@ -156,9 +161,20 @@ const apiRequest = async (path, options = {}) => {
 
 const loadApiData = async () => {
   try {
-    const [serverProperties, serverClients] = await Promise.all([apiRequest('/properties'), apiRequest('/clients')])
+    const [serverProperties, serverClients, serverContracts, serverInstallments, serverVouchers, serverLedger] = await Promise.all([
+      apiRequest('/properties'),
+      apiRequest('/clients'),
+      apiRequest('/contracts'),
+      apiRequest('/installments'),
+      apiRequest('/vouchers'),
+      apiRequest('/ledger'),
+    ])
     properties.value = serverProperties
     clients.value = serverClients
+    contracts.value = serverContracts
+    installments.value = serverInstallments
+    vouchers.value = serverVouchers
+    ledger.value = serverLedger
     apiOnline.value = true
   } catch {
     apiOnline.value = false
@@ -274,11 +290,64 @@ const addClient = () => {
   clientForm.value.nationalId = ''
 }
 
-const contracts = [
-  { code: 'CT-2026-000044', client: 'أحمد علي', kind: 'بيع نقدي', paid: '120,000,000', due: '0', status: 'مكتمل' },
-  { code: 'CT-2026-000045', client: 'سارة كريم', kind: 'تقسيط', paid: '30,000,000', due: '120,000,000', status: 'نشط' },
-  { code: 'CT-2026-000046', client: 'محمد حسن', kind: 'إيجار', paid: '1,400,000', due: '700,000', status: 'شهري' },
-]
+const voucherForm = ref({
+  type: 'قبض',
+  client: '',
+  amount: '',
+  reason: '',
+  propertyCode: '',
+  contractCode: '',
+})
+
+const validateVoucher = () => {
+  const errors = {}
+  const amount = Number(String(voucherForm.value.amount).replaceAll(',', ''))
+
+  if (!voucherForm.value.client.trim()) errors.client = 'يرجى إدخال اسم الطرف.'
+  if (!Number.isFinite(amount) || amount <= 0) errors.amount = 'مبلغ السند يجب أن يكون أكبر من صفر.'
+  if (!voucherForm.value.reason.trim()) errors.reason = 'يرجى إدخال سبب السند.'
+
+  voucherErrors.value = errors
+  return Object.keys(errors).length === 0
+}
+
+const addVoucher = () => {
+  if (!validateVoucher()) return
+
+  const payload = {
+    ...voucherForm.value,
+    amount: Number(String(voucherForm.value.amount).replaceAll(',', '')),
+  }
+
+  apiRequest('/vouchers', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
+    .then((createdVoucher) => {
+      vouchers.value.unshift(createdVoucher)
+      return apiRequest('/ledger')
+    })
+    .then((serverLedger) => {
+      ledger.value = serverLedger
+      apiOnline.value = true
+      showSuccess('تم حفظ السند وتحديث دفتر الأستاذ.')
+    })
+    .catch((error) => {
+      apiOnline.value = false
+      if (Object.keys(error.errors || {}).length > 0) {
+        voucherErrors.value = error.errors
+        return
+      }
+      vouchers.value.unshift({ ...payload, code: `LOCAL-${Date.now()}`, issuedAt: new Date().toISOString().slice(0, 10) })
+      showSuccess('تمت إضافة السند محلياً. شغّل API لحفظه في السيرفر.')
+    })
+
+  voucherForm.value.client = ''
+  voucherForm.value.amount = ''
+  voucherForm.value.reason = ''
+  voucherForm.value.propertyCode = ''
+  voucherForm.value.contractCode = ''
+}
 
 const notifications = [
   'قسط مستحق اليوم للعقد CT-2026-000045',
@@ -310,13 +379,25 @@ const chartBars = [
 const stats = computed(() => {
   const available = properties.value.filter((property) => property.status === 'متاح').length
   const reserved = properties.value.filter((property) => property.status === 'محجوز').length
+  const officeProfit = contracts.value.reduce((sum, contract) => sum + Number(contract.commission || 0), 0)
+  const dueInstallments = installments.value.filter((installment) => installment.status === 'مستحق').length
 
   return [
     { label: 'إجمالي العقارات', value: String(properties.value.length), trend: `${available} متاح`, icon: Building2 },
     { label: 'العقارات المتاحة', value: String(available), trend: `${reserved} محجوز`, icon: Home },
-    { label: 'أرباح المكتب', value: '42.8م', trend: '+12% عن الشهر السابق', icon: CircleDollarSign },
-    { label: 'أقساط مستحقة', value: '16', trend: '5 متأخرة', icon: CalendarClock },
+    { label: 'عمولات المكتب', value: `${(officeProfit / 1000000).toFixed(1)}م`, trend: `${contracts.value.length} عقود`, icon: CircleDollarSign },
+    { label: 'أقساط مستحقة', value: String(dueInstallments), trend: `${installments.value.length} قسط مجدول`, icon: CalendarClock },
   ]
+})
+
+const financialSummary = computed(() => {
+  const income = ledger.value.filter((entry) => entry.direction === 'credit').reduce((sum, entry) => sum + Number(entry.amount || 0), 0)
+  const expenses = ledger.value.filter((entry) => entry.direction === 'debit').reduce((sum, entry) => sum + Number(entry.amount || 0), 0)
+  return {
+    income,
+    expenses,
+    balance: income - expenses,
+  }
 })
 
 const propertyStatuses = computed(() => ['الكل', ...new Set(properties.value.map((property) => property.status))])
@@ -360,6 +441,8 @@ const exportProperties = () => {
   const csv = rows.map((row) => row.map((cell) => `"${String(cell).replaceAll('"', '""')}"`).join(',')).join('\n')
   downloadFile('propify-properties.csv', csv)
 }
+
+const formatMoney = (value) => Number(value || 0).toLocaleString('en-US')
 
 watch(
   properties,
@@ -688,10 +771,87 @@ onMounted(loadApiData)
                 <span>{{ contract.client }} · {{ contract.kind }}</span>
               </div>
               <div class="money">
-                <span>مدفوع {{ contract.paid }}</span>
-                <span>متبقي {{ contract.due }}</span>
+                <span>مدفوع {{ formatMoney(contract.paid) }}</span>
+                <span>متبقي {{ formatMoney(contract.due) }}</span>
               </div>
               <span class="badge" :class="statusClass(contract.status)">{{ contract.status }}</span>
+            </div>
+          </div>
+        </article>
+
+        <article class="panel wide">
+          <div class="panel-header">
+            <div>
+              <p class="eyebrow">الحسابات</p>
+              <h2>سند قبض / سند دفع</h2>
+            </div>
+            <WalletCards :size="22" />
+          </div>
+          <form class="smart-form finance-form" @submit.prevent="addVoucher">
+            <label>
+              <span>نوع السند</span>
+              <select v-model="voucherForm.type">
+                <option>قبض</option>
+                <option>دفع</option>
+              </select>
+            </label>
+            <label>
+              <span>الطرف</span>
+              <input v-model="voucherForm.client" placeholder="اسم العميل أو المستلم" />
+              <small v-if="voucherErrors.client" class="field-error"><AlertCircle :size="14" />{{ voucherErrors.client }}</small>
+            </label>
+            <label>
+              <span>المبلغ / دينار</span>
+              <input v-model="voucherForm.amount" inputmode="numeric" placeholder="2000000" />
+              <small v-if="voucherErrors.amount" class="field-error"><AlertCircle :size="14" />{{ voucherErrors.amount }}</small>
+            </label>
+            <label>
+              <span>السبب</span>
+              <input v-model="voucherForm.reason" placeholder="مقدم شراء عقار، مصروف إعلان..." />
+              <small v-if="voucherErrors.reason" class="field-error"><AlertCircle :size="14" />{{ voucherErrors.reason }}</small>
+            </label>
+            <label>
+              <span>العقار</span>
+              <input v-model="voucherForm.propertyCode" placeholder="PR-2026-000145" />
+            </label>
+            <label>
+              <span>العقد</span>
+              <input v-model="voucherForm.contractCode" placeholder="CT-2026-000044" />
+            </label>
+            <button class="submit-button" type="submit"><Plus :size="18" /> حفظ السند</button>
+          </form>
+        </article>
+
+        <article class="panel">
+          <div class="panel-header">
+            <div>
+              <p class="eyebrow">Ledger</p>
+              <h2>رصيد المكتب</h2>
+            </div>
+            <CircleDollarSign :size="22" />
+          </div>
+          <div class="finance-summary">
+            <div><span>الإيرادات</span><strong>{{ formatMoney(financialSummary.income) }}</strong></div>
+            <div><span>المصروفات</span><strong>{{ formatMoney(financialSummary.expenses) }}</strong></div>
+            <div><span>الرصيد</span><strong>{{ formatMoney(financialSummary.balance) }}</strong></div>
+          </div>
+        </article>
+
+        <article class="panel">
+          <div class="panel-header">
+            <div>
+              <p class="eyebrow">الأقساط</p>
+              <h2>أقرب الاستحقاقات</h2>
+            </div>
+            <CalendarClock :size="22" />
+          </div>
+          <div class="stack-list">
+            <div v-for="installment in installments.slice(0, 4)" :key="`${installment.contractCode}-${installment.number}`" class="list-row">
+              <div>
+                <strong>{{ installment.contractCode }}</strong>
+                <span>القسط {{ installment.number }} · {{ installment.dueDate }}</span>
+              </div>
+              <small>{{ formatMoney(installment.amount) }} · {{ installment.status }}</small>
             </div>
           </div>
         </article>

@@ -56,6 +56,24 @@ const seeds = {
     { name: 'محمد حسن', role: 'مؤجر', phone: '07801234567', nationalId: 'B12345678901', stage: 'عقد نشط', source: 'توصية' },
     { name: 'سارة كريم', role: 'مالك عقار', phone: '07501234567', nationalId: 'C12345678901', stage: 'مراجعة عقار', source: 'الموقع' },
   ],
+  contracts: [
+    { code: 'CT-2026-000044', propertyCode: 'PR-2026-000145', client: 'أحمد علي', kind: 'بيع نقدي', total: 120000000, paid: 120000000, due: 0, commission: 2400000, status: 'مكتمل' },
+    { code: 'CT-2026-000045', propertyCode: 'PR-2026-000147', client: 'سارة كريم', kind: 'تقسيط', total: 150000000, paid: 30000000, due: 120000000, commission: 3000000, status: 'نشط' },
+    { code: 'CT-2026-000046', propertyCode: 'PR-2026-000146', client: 'محمد حسن', kind: 'إيجار', total: 8400000, paid: 1400000, due: 7000000, commission: 700000, status: 'شهري' },
+  ],
+  installments: [
+    { contractCode: 'CT-2026-000045', number: 1, dueDate: '2026-07-01', amount: 5000000, paidAmount: 0, status: 'مستحق' },
+    { contractCode: 'CT-2026-000045', number: 2, dueDate: '2026-08-01', amount: 5000000, paidAmount: 0, status: 'بانتظار' },
+    { contractCode: 'CT-2026-000045', number: 3, dueDate: '2026-09-01', amount: 5000000, paidAmount: 0, status: 'بانتظار' },
+  ],
+  vouchers: [
+    { code: 'RV-2026-000001', type: 'قبض', client: 'أحمد علي', amount: 2000000, reason: 'مقدم شراء عقار', propertyCode: 'PR-2026-000145', contractCode: 'CT-2026-000044', issuedAt: '2026-06-26' },
+    { code: 'PV-2026-000001', type: 'دفع', client: 'محمد حسن', amount: 500000, reason: 'مصاريف إعلان وتصوير عقار', propertyCode: 'PR-2026-000146', contractCode: '', issuedAt: '2026-06-26' },
+  ],
+  ledger: [
+    { code: 'LE-2026-000001', direction: 'credit', amount: 2000000, description: 'سند قبض RV-2026-000001', entryDate: '2026-06-26' },
+    { code: 'LE-2026-000002', direction: 'debit', amount: 500000, description: 'سند دفع PV-2026-000001', entryDate: '2026-06-26' },
+  ],
 }
 
 const jsonResponse = (response, status, body) => {
@@ -84,7 +102,16 @@ const ensureDatabase = async () => {
 
 const readDatabase = async () => {
   await ensureDatabase()
-  return JSON.parse(await readFile(DATA_FILE, 'utf8'))
+  const database = JSON.parse(await readFile(DATA_FILE, 'utf8'))
+  let changed = false
+  for (const [key, value] of Object.entries(seeds)) {
+    if (!Array.isArray(database[key])) {
+      database[key] = value
+      changed = true
+    }
+  }
+  if (changed) await writeDatabase(database)
+  return database
 }
 
 const writeDatabase = async (database) => {
@@ -97,12 +124,16 @@ const iraqiPhonePattern = /^(075|077|078|079)[0-9]{8}$/
 const nationalIdPattern = /^[A-Za-z0-9]{12,}$/
 
 const nextPropertyCode = (properties) => {
+  return nextCode(properties, 'code', 'PR', 144)
+}
+
+const nextCode = (records, field, prefix, start = 0) => {
   const currentYear = new Date().getFullYear()
-  const maxSequence = properties.reduce((max, property) => {
-    const match = String(property.code).match(/PR-\d{4}-(\d{6})/)
+  const maxSequence = records.reduce((max, record) => {
+    const match = String(record[field]).match(new RegExp(`${prefix}-\\d{4}-(\\d{6})`))
     return match ? Math.max(max, Number(match[1])) : max
-  }, 144)
-  return `PR-${currentYear}-${String(maxSequence + 1).padStart(6, '0')}`
+  }, start)
+  return `${prefix}-${currentYear}-${String(maxSequence + 1).padStart(6, '0')}`
 }
 
 const validateProperty = (property) => {
@@ -122,6 +153,24 @@ const validateClient = (client) => {
   return errors
 }
 
+const validateContract = (contract) => {
+  const errors = {}
+  if (!String(contract.propertyCode ?? '').trim()) errors.propertyCode = 'يرجى اختيار رقم العقار.'
+  if (!String(contract.client ?? '').trim()) errors.client = 'يرجى إدخال اسم العميل.'
+  if (!isPositiveNumber(contract.total)) errors.total = 'قيمة العقد يجب أن تكون أكبر من صفر.'
+  if (Number(onlyDigits(contract.paid || 0)) > Number(onlyDigits(contract.total))) errors.paid = 'المدفوع لا يمكن أن يتجاوز قيمة العقد.'
+  return errors
+}
+
+const validateVoucher = (voucher) => {
+  const errors = {}
+  if (!['قبض', 'دفع'].includes(voucher.type)) errors.type = 'نوع السند يجب أن يكون قبض أو دفع.'
+  if (!String(voucher.client ?? '').trim()) errors.client = 'يرجى إدخال اسم الطرف.'
+  if (!isPositiveNumber(voucher.amount)) errors.amount = 'مبلغ السند يجب أن يكون أكبر من صفر.'
+  if (!String(voucher.reason ?? '').trim()) errors.reason = 'يرجى إدخال سبب السند.'
+  return errors
+}
+
 const filterRecords = (records, search, status) => {
   const query = String(search ?? '').trim().toLowerCase()
   return records.filter((record) => {
@@ -137,14 +186,19 @@ const routes = {
     const database = await readDatabase()
     const available = database.properties.filter((property) => property.status === 'متاح').length
     const reserved = database.properties.filter((property) => property.status === 'محجوز').length
+    const officeProfit = database.contracts.reduce((sum, contract) => sum + Number(contract.commission || 0), 0)
+    const installmentsDue = database.installments.filter((installment) => installment.status === 'مستحق').length
+    const installmentsLate = database.installments.filter((installment) => installment.status === 'متأخر').length
     return {
       properties_total: database.properties.length,
       properties_available: available,
       properties_reserved: reserved,
       clients_total: database.clients.length,
-      office_profit: 42800000,
-      installments_due: 16,
-      installments_late: 5,
+      contracts_total: database.contracts.length,
+      vouchers_total: database.vouchers.length,
+      office_profit: officeProfit,
+      installments_due: installmentsDue,
+      installments_late: installmentsLate,
     }
   },
   'GET /api/properties': async ({ url }) => {
@@ -177,6 +231,94 @@ const routes = {
   'GET /api/clients': async ({ url }) => {
     const database = await readDatabase()
     return filterRecords(database.clients, url.searchParams.get('search'))
+  },
+  'GET /api/contracts': async ({ url }) => {
+    const database = await readDatabase()
+    return filterRecords(database.contracts, url.searchParams.get('search'), url.searchParams.get('status'))
+  },
+  'POST /api/contracts': async ({ request }) => {
+    const database = await readDatabase()
+    const payload = await readBody(request)
+    const errors = validateContract(payload)
+    if (Object.keys(errors).length > 0) return { status: 422, body: { message: 'Validation failed', errors } }
+
+    const total = Number(onlyDigits(payload.total))
+    const paid = Number(onlyDigits(payload.paid || 0))
+    const commissionRate = Number(payload.commissionRate || 0)
+    const contract = {
+      code: nextCode(database.contracts, 'code', 'CT', 43),
+      propertyCode: payload.propertyCode,
+      client: payload.client,
+      kind: payload.kind || 'بيع نقدي',
+      total,
+      paid,
+      due: total - paid,
+      commission: Math.round(total * (commissionRate / 100)),
+      status: payload.status || 'نشط',
+    }
+
+    database.contracts.unshift(contract)
+
+    if (contract.kind === 'تقسيط') {
+      const installmentsCount = Number(payload.installmentsCount || 1)
+      const amount = Math.round(contract.due / installmentsCount)
+      for (let index = 1; index <= installmentsCount; index += 1) {
+        database.installments.push({
+          contractCode: contract.code,
+          number: index,
+          dueDate: new Date(Date.UTC(new Date().getFullYear(), new Date().getMonth() + index, 1)).toISOString().slice(0, 10),
+          amount,
+          paidAmount: 0,
+          status: index === 1 ? 'مستحق' : 'بانتظار',
+        })
+      }
+    }
+
+    await writeDatabase(database)
+    return { status: 201, body: contract }
+  },
+  'GET /api/installments': async ({ url }) => {
+    const database = await readDatabase()
+    return filterRecords(database.installments, url.searchParams.get('search'), url.searchParams.get('status'))
+  },
+  'GET /api/vouchers': async ({ url }) => {
+    const database = await readDatabase()
+    return filterRecords(database.vouchers, url.searchParams.get('search'), url.searchParams.get('type'))
+  },
+  'POST /api/vouchers': async ({ request }) => {
+    const database = await readDatabase()
+    const payload = await readBody(request)
+    const errors = validateVoucher(payload)
+    if (Object.keys(errors).length > 0) return { status: 422, body: { message: 'Validation failed', errors } }
+
+    const prefix = payload.type === 'قبض' ? 'RV' : 'PV'
+    const voucher = {
+      code: nextCode(database.vouchers.filter((item) => item.type === payload.type), 'code', prefix, 0),
+      type: payload.type,
+      client: payload.client,
+      amount: Number(onlyDigits(payload.amount)),
+      reason: payload.reason,
+      propertyCode: payload.propertyCode || '',
+      contractCode: payload.contractCode || '',
+      issuedAt: payload.issuedAt || new Date().toISOString().slice(0, 10),
+    }
+
+    const ledgerEntry = {
+      code: nextCode(database.ledger, 'code', 'LE', 0),
+      direction: voucher.type === 'قبض' ? 'credit' : 'debit',
+      amount: voucher.amount,
+      description: `سند ${voucher.type} ${voucher.code}`,
+      entryDate: voucher.issuedAt,
+    }
+
+    database.vouchers.unshift(voucher)
+    database.ledger.unshift(ledgerEntry)
+    await writeDatabase(database)
+    return { status: 201, body: voucher }
+  },
+  'GET /api/ledger': async () => {
+    const database = await readDatabase()
+    return database.ledger
   },
   'POST /api/clients': async ({ request }) => {
     const database = await readDatabase()

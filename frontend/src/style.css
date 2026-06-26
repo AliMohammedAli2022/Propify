@@ -633,6 +633,34 @@ th {
   background: var(--surface-2);
 }
 
+.finance-form {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.finance-summary {
+  display: grid;
+  gap: 10px;
+}
+
+.finance-summary div {
+  min-height: 58px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px;
+  border-radius: var(--radius);
+  background: var(--surface-2);
+}
+
+.finance-summary span {
+  color: var(--muted);
+}
+
+.finance-summary strong {
+  direction: ltr;
+}
+
 @keyframes rise {
   from {
     transform: scaleY(0.35);
@@ -698,7 +726,8 @@ th {
   .content-grid,
   .operations-grid,
   .permission-grid,
-  .smart-form {
+  .smart-form,
+  .finance-form {
     grid-template-columns: 1fr;
   }
 
