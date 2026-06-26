@@ -782,6 +782,11 @@ td .row-actions {
   margin-bottom: 16px;
 }
 
+.report-list-actions {
+  justify-content: flex-start;
+  margin-bottom: 10px;
+}
+
 .report-users {
   margin-bottom: 16px;
 }

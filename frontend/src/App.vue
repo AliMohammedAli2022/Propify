@@ -54,6 +54,9 @@ const activityPageSize = 6
 const userSort = ref({ key: 'name', direction: 'asc' })
 const userPage = ref(1)
 const userPageSize = 6
+const employeeSort = ref({ key: 'name', direction: 'asc' })
+const employeePage = ref(1)
+const employeePageSize = 5
 const apiOnline = ref(false)
 const authToken = ref(localStorage.getItem('propify.authToken') || '')
 const currentUser = ref(null)
@@ -1538,6 +1541,47 @@ const previousUserPage = () => {
   userPage.value = Math.max(userPage.value - 1, 1)
 }
 
+const employeeReportUsers = computed(() => employeePerformanceReport.value?.users || [])
+
+const sortedEmployeeReportUsers = computed(() => {
+  const sorted = [...employeeReportUsers.value]
+  const { key, direction } = employeeSort.value
+
+  return sorted.sort((a, b) => {
+    const first = key === 'permissionsCount' ? Number(a.permissionsCount || 0) : a[key]
+    const second = key === 'permissionsCount' ? Number(b.permissionsCount || 0) : b[key]
+
+    return compareValues(first, second, direction)
+  })
+})
+
+const employeePageCount = computed(() => Math.max(1, Math.ceil(sortedEmployeeReportUsers.value.length / employeePageSize)))
+const paginatedEmployeeReportUsers = computed(() => {
+  const start = (employeePage.value - 1) * employeePageSize
+  return sortedEmployeeReportUsers.value.slice(start, start + employeePageSize)
+})
+
+const sortEmployeeReportUsers = (key) => {
+  employeeSort.value = {
+    key,
+    direction: employeeSort.value.key === key && employeeSort.value.direction === 'asc' ? 'desc' : 'asc',
+  }
+  employeePage.value = 1
+}
+
+const employeeSortLabel = (key) => {
+  if (employeeSort.value.key !== key) return ''
+  return employeeSort.value.direction === 'asc' ? '↑' : '↓'
+}
+
+const nextEmployeePage = () => {
+  employeePage.value = Math.min(employeePage.value + 1, employeePageCount.value)
+}
+
+const previousEmployeePage = () => {
+  employeePage.value = Math.max(employeePage.value - 1, 1)
+}
+
 const downloadFile = (filename, content, type = 'text/csv;charset=utf-8', withBom = true) => {
   const blob = new Blob([withBom ? '\ufeff' : '', content], { type })
   const url = URL.createObjectURL(blob)
@@ -1713,6 +1757,10 @@ watch(activityPageCount, (pageCount) => {
 
 watch(userPageCount, (pageCount) => {
   userPage.value = Math.min(userPage.value, pageCount)
+})
+
+watch(employeePageCount, (pageCount) => {
+  employeePage.value = Math.min(employeePage.value, pageCount)
 })
 
 const statusClass = (status) =>
@@ -2458,13 +2506,30 @@ onMounted(loadCurrentUser)
             <button class="text-button" type="button" @click="downloadReport('installments', 'propify-installments-report.csv')"><Download :size="18" /> الأقساط</button>
             <button class="text-button" type="button" @click="downloadReport('employee-performance', 'propify-employee-performance-report.csv')"><Download :size="18" /> الموظفون</button>
           </div>
+          <div class="panel-actions report-list-actions">
+            <button class="ghost-button" type="button" @click="sortEmployeeReportUsers('name')">الاسم {{ employeeSortLabel('name') }}</button>
+            <button class="ghost-button" type="button" @click="sortEmployeeReportUsers('permissionsCount')">الصلاحيات {{ employeeSortLabel('permissionsCount') }}</button>
+          </div>
           <div class="stack-list report-users">
-            <div v-for="user in employeePerformanceReport?.users?.slice(0, 5) || []" :key="user.id" class="list-row">
+            <div v-for="user in paginatedEmployeeReportUsers" :key="user.id" class="list-row">
               <div>
                 <strong>{{ user.name }}</strong>
                 <span>{{ user.email }} · {{ roleLabel(user.role) }}</span>
               </div>
               <small>{{ user.permissionsCount }} صلاحيات</small>
+            </div>
+            <p v-if="sortedEmployeeReportUsers.length === 0" class="empty-note">لا توجد بيانات موظفين في التقرير الحالي.</p>
+          </div>
+          <div class="pagination-bar">
+            <span>عرض {{ paginatedEmployeeReportUsers.length }} من {{ sortedEmployeeReportUsers.length }} موظف</span>
+            <div class="row-actions">
+              <button class="mini-button" type="button" :disabled="employeePage === 1" @click="previousEmployeePage">
+                <ChevronRight :size="17" />
+              </button>
+              <span>{{ employeePage }} / {{ employeePageCount }}</span>
+              <button class="mini-button" type="button" :disabled="employeePage === employeePageCount" @click="nextEmployeePage">
+                <ChevronLeft :size="17" />
+              </button>
             </div>
           </div>
           <div class="chart" aria-label="مخطط مبيعات وإيجارات">
