@@ -463,8 +463,26 @@ class PropifyController extends Controller
 
         $query = Contract::query()->latest();
         $this->applySearch($query, $request, ['code', 'property_code', 'client', 'kind', 'status']);
+        $contracts = $query->get();
 
-        return $this->json($query->get()->map(fn (Contract $contract) => $this->contractResource($contract)));
+        if ($request->query('export') === 'csv') {
+            return $this->csvResponse([
+                ['رقم العقد', 'العقار', 'العميل', 'النوع', 'الإجمالي', 'المدفوع', 'المتبقي', 'العمولة', 'الحالة'],
+                ...$contracts->map(fn (Contract $contract) => [
+                    $contract->code,
+                    $contract->property_code,
+                    $contract->client,
+                    $contract->kind,
+                    $contract->total,
+                    $contract->paid,
+                    $contract->due,
+                    $contract->commission,
+                    $contract->status,
+                ])->all(),
+            ], 'propify-contracts.csv');
+        }
+
+        return $this->json($contracts->map(fn (Contract $contract) => $this->contractResource($contract)));
     }
 
     public function storeContract(Request $request): JsonResponse

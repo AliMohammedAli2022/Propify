@@ -1833,6 +1833,24 @@ const downloadClients = async () => {
   }
 }
 
+const downloadContracts = async () => {
+  try {
+    const response = await fetch(`${API_BASE_URL}/contracts?export=csv`, {
+      headers: {
+        ...(authToken.value ? { Authorization: `Bearer ${authToken.value}` } : {}),
+      },
+    })
+    if (!response.ok) throw new Error('Contracts export failed')
+
+    const content = await response.text()
+    downloadFile('propify-contracts.csv', content)
+    apiOnline.value = true
+  } catch {
+    apiOnline.value = false
+    showSuccess('تعذر تنزيل قائمة العقود من API.')
+  }
+}
+
 const downloadBackup = async () => {
   try {
     const response = await fetch(`${API_BASE_URL}/backup/export`, {
@@ -2488,6 +2506,7 @@ onMounted(loadCurrentUser)
             <div class="panel-actions">
               <button class="ghost-button" type="button" @click="sortContracts('code')">الرقم {{ contractSortLabel('code') }}</button>
               <button class="ghost-button" type="button" @click="sortContracts('due')">المتبقي {{ contractSortLabel('due') }}</button>
+              <button class="ghost-button" type="button" title="تنزيل العقود" @click="downloadContracts"><Download :size="17" /></button>
             </div>
           </div>
           <div class="contracts">
