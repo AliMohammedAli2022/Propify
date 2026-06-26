@@ -123,6 +123,7 @@ const clientForm = ref({
 const propertyErrors = ref({})
 const clientErrors = ref({})
 const voucherErrors = ref({})
+const contractErrors = ref({})
 const successMessage = ref('')
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8787/api'
 const contracts = ref([])
@@ -299,6 +300,75 @@ const voucherForm = ref({
   contractCode: '',
 })
 
+const contractForm = ref({
+  propertyCode: '',
+  client: '',
+  kind: 'بيع نقدي',
+  total: '',
+  paid: '',
+  commissionRate: 2,
+  installmentsCount: 12,
+  status: 'نشط',
+})
+
+const validateContract = () => {
+  const errors = {}
+  const total = Number(String(contractForm.value.total).replaceAll(',', ''))
+  const paid = Number(String(contractForm.value.paid || 0).replaceAll(',', ''))
+
+  if (!contractForm.value.propertyCode.trim()) errors.propertyCode = 'يرجى إدخال رقم العقار.'
+  if (!contractForm.value.client.trim()) errors.client = 'يرجى إدخال اسم العميل.'
+  if (!Number.isFinite(total) || total <= 0) errors.total = 'قيمة العقد يجب أن تكون أكبر من صفر.'
+  if (Number.isFinite(paid) && paid > total) errors.paid = 'المدفوع لا يمكن أن يتجاوز قيمة العقد.'
+  if (contractForm.value.kind === 'تقسيط' && Number(contractForm.value.installmentsCount) <= 0) {
+    errors.installmentsCount = 'عدد الأقساط يجب أن يكون أكبر من صفر.'
+  }
+
+  contractErrors.value = errors
+  return Object.keys(errors).length === 0
+}
+
+const addContract = () => {
+  if (!validateContract()) return
+
+  const payload = {
+    ...contractForm.value,
+    total: Number(String(contractForm.value.total).replaceAll(',', '')),
+    paid: Number(String(contractForm.value.paid || 0).replaceAll(',', '')),
+    commissionRate: Number(contractForm.value.commissionRate || 0),
+    installmentsCount: Number(contractForm.value.installmentsCount || 1),
+  }
+
+  apiRequest('/contracts', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
+    .then((createdContract) => {
+      contracts.value.unshift(createdContract)
+      return apiRequest('/installments')
+    })
+    .then((serverInstallments) => {
+      installments.value = serverInstallments
+      apiOnline.value = true
+      showSuccess('تم إنشاء العقد وتحديث جدول الأقساط.')
+    })
+    .catch((error) => {
+      apiOnline.value = false
+      if (Object.keys(error.errors || {}).length > 0) {
+        contractErrors.value = error.errors
+        return
+      }
+      contracts.value.unshift({ ...payload, code: `LOCAL-${Date.now()}`, due: payload.total - payload.paid, commission: Math.round(payload.total * (payload.commissionRate / 100)) })
+      showSuccess('تمت إضافة العقد محلياً. شغّل API لحفظه في السيرفر.')
+    })
+
+  contractForm.value.propertyCode = ''
+  contractForm.value.client = ''
+  contractForm.value.total = ''
+  contractForm.value.paid = ''
+  contractForm.value.installmentsCount = 12
+}
+
 const validateVoucher = () => {
   const errors = {}
   const amount = Number(String(voucherForm.value.amount).replaceAll(',', ''))
@@ -440,6 +510,51 @@ const exportProperties = () => {
   ]
   const csv = rows.map((row) => row.map((cell) => `"${String(cell).replaceAll('"', '""')}"`).join(',')).join('\n')
   downloadFile('propify-properties.csv', csv)
+}
+
+const printContract = (contract) => {
+  const printWindow = window.open('', '_blank', 'width=900,height=700')
+  if (!printWindow) return
+
+  printWindow.document.write(`
+    <html lang="ar" dir="rtl">
+      <head>
+        <title>${contract.code}</title>
+        <style>
+          body { font-family: Tahoma, Arial, sans-serif; padding: 32px; color: #111827; }
+          header { border-bottom: 2px solid #147d73; margin-bottom: 24px; padding-bottom: 12px; }
+          h1 { margin: 0 0 8px; }
+          table { width: 100%; border-collapse: collapse; margin-top: 18px; }
+          td { border: 1px solid #d1d5db; padding: 10px; }
+          .signatures { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; margin-top: 80px; text-align: center; }
+          .signatures div { border-top: 1px solid #111827; padding-top: 8px; }
+        </style>
+      </head>
+      <body>
+        <header>
+          <h1>Propify</h1>
+          <strong>عقد ${contract.kind} رقم ${contract.code}</strong>
+        </header>
+        <table>
+          <tr><td>رقم العقار</td><td>${contract.propertyCode || '-'}</td></tr>
+          <tr><td>العميل</td><td>${contract.client}</td></tr>
+          <tr><td>قيمة العقد</td><td>${formatMoney(contract.total)} دينار</td></tr>
+          <tr><td>المدفوع</td><td>${formatMoney(contract.paid)} دينار</td></tr>
+          <tr><td>المتبقي</td><td>${formatMoney(contract.due)} دينار</td></tr>
+          <tr><td>عمولة المكتب</td><td>${formatMoney(contract.commission)} دينار</td></tr>
+          <tr><td>الحالة</td><td>${contract.status}</td></tr>
+        </table>
+        <div class="signatures">
+          <div>توقيع الطرف الأول</div>
+          <div>توقيع الطرف الثاني</div>
+          <div>ختم المكتب</div>
+        </div>
+      </body>
+    </html>
+  `)
+  printWindow.document.close()
+  printWindow.focus()
+  printWindow.print()
 }
 
 const formatMoney = (value) => Number(value || 0).toLocaleString('en-US')
@@ -676,6 +791,70 @@ onMounted(loadApiData)
             <button class="submit-button" type="submit"><Plus :size="18" /> إضافة العميل</button>
           </form>
         </article>
+
+        <article class="panel form-panel wide-operation">
+          <div class="panel-header">
+            <div>
+              <p class="eyebrow">العقود والتقسيط</p>
+              <h2>إنشاء عقد جديد</h2>
+            </div>
+            <FileCheck2 :size="22" />
+          </div>
+          <form class="smart-form contract-form" @submit.prevent="addContract">
+            <label>
+              <span>رقم العقار</span>
+              <select v-model="contractForm.propertyCode">
+                <option value="">اختر العقار</option>
+                <option v-for="property in properties" :key="property.code" :value="property.code">{{ property.code }} · {{ property.area }}</option>
+              </select>
+              <small v-if="contractErrors.propertyCode" class="field-error"><AlertCircle :size="14" />{{ contractErrors.propertyCode }}</small>
+            </label>
+            <label>
+              <span>العميل</span>
+              <select v-model="contractForm.client">
+                <option value="">اختر العميل</option>
+                <option v-for="client in clients" :key="client.phone" :value="client.name">{{ client.name }} · {{ client.role }}</option>
+              </select>
+              <small v-if="contractErrors.client" class="field-error"><AlertCircle :size="14" />{{ contractErrors.client }}</small>
+            </label>
+            <label>
+              <span>نوع العقد</span>
+              <select v-model="contractForm.kind">
+                <option>بيع نقدي</option>
+                <option>تقسيط</option>
+                <option>إيجار</option>
+              </select>
+            </label>
+            <label>
+              <span>قيمة العقد</span>
+              <input v-model="contractForm.total" inputmode="numeric" placeholder="150000000" />
+              <small v-if="contractErrors.total" class="field-error"><AlertCircle :size="14" />{{ contractErrors.total }}</small>
+            </label>
+            <label>
+              <span>المدفوع</span>
+              <input v-model="contractForm.paid" inputmode="numeric" placeholder="30000000" />
+              <small v-if="contractErrors.paid" class="field-error"><AlertCircle :size="14" />{{ contractErrors.paid }}</small>
+            </label>
+            <label>
+              <span>عمولة المكتب %</span>
+              <input v-model="contractForm.commissionRate" inputmode="decimal" />
+            </label>
+            <label v-if="contractForm.kind === 'تقسيط'">
+              <span>عدد الأقساط</span>
+              <input v-model="contractForm.installmentsCount" inputmode="numeric" />
+              <small v-if="contractErrors.installmentsCount" class="field-error"><AlertCircle :size="14" />{{ contractErrors.installmentsCount }}</small>
+            </label>
+            <label>
+              <span>الحالة</span>
+              <select v-model="contractForm.status">
+                <option>نشط</option>
+                <option>مكتمل</option>
+                <option>شهري</option>
+              </select>
+            </label>
+            <button class="submit-button" type="submit"><Plus :size="18" /> إنشاء العقد</button>
+          </form>
+        </article>
       </section>
 
       <section class="content-grid">
@@ -761,7 +940,7 @@ onMounted(loadApiData)
               <p class="eyebrow">العقود</p>
               <h2>البيع، الإيجار، التقسيط</h2>
             </div>
-            <button class="text-button" type="button"><Printer :size="18" /> طباعة عقد</button>
+            <FileText :size="22" />
           </div>
           <div class="contracts">
             <div v-for="contract in contracts" :key="contract.code" class="contract-card">
@@ -775,6 +954,9 @@ onMounted(loadApiData)
                 <span>متبقي {{ formatMoney(contract.due) }}</span>
               </div>
               <span class="badge" :class="statusClass(contract.status)">{{ contract.status }}</span>
+              <button class="mini-button" type="button" title="طباعة العقد" @click="printContract(contract)">
+                <Printer :size="17" />
+              </button>
             </div>
           </div>
         </article>

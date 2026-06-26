@@ -321,6 +321,10 @@ h2 {
   margin-bottom: 16px;
 }
 
+.wide-operation {
+  grid-column: 1 / -1;
+}
+
 .stat-card,
 .panel {
   background: rgba(255, 255, 255, 0.82);
@@ -475,6 +479,10 @@ h2 {
   box-shadow: 0 0 18px rgba(26, 163, 154, 0.18);
 }
 
+.contract-form {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
 .text-button {
   min-height: 38px;
   display: inline-flex;
@@ -559,6 +567,17 @@ th {
   border: 1px solid var(--line);
   border-radius: var(--radius);
   background: var(--surface-2);
+}
+
+.mini-button {
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  color: var(--text);
+  background: var(--surface);
 }
 
 .list-row div,
@@ -727,7 +746,8 @@ th {
   .operations-grid,
   .permission-grid,
   .smart-form,
-  .finance-form {
+  .finance-form,
+  .contract-form {
     grid-template-columns: 1fr;
   }
 
