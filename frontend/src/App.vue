@@ -57,6 +57,9 @@ const userPageSize = 6
 const employeeSort = ref({ key: 'name', direction: 'asc' })
 const employeePage = ref(1)
 const employeePageSize = 5
+const notificationSort = ref({ key: 'createdAt', direction: 'desc' })
+const notificationPage = ref(1)
+const notificationPageSize = 5
 const apiOnline = ref(false)
 const authToken = ref(localStorage.getItem('propify.authToken') || '')
 const currentUser = ref(null)
@@ -1168,6 +1171,58 @@ const compareValues = (first, second, direction = 'asc', locale = 'ar') => {
   return String(first ?? '').localeCompare(String(second ?? ''), locale) * multiplier
 }
 
+const filteredNotifications = computed(() => {
+  const query = searchQuery.value.trim().toLowerCase()
+
+  return visibleNotifications.value.filter((notification) => {
+    const searchable = [
+      notification.title,
+      notification.message,
+      notification.type,
+      notification.severity,
+      notification.createdAt,
+    ]
+      .join(' ')
+      .toLowerCase()
+
+    return !query || searchable.includes(query)
+  })
+})
+
+const sortedNotifications = computed(() => {
+  const sorted = [...filteredNotifications.value]
+  const { key, direction } = notificationSort.value
+
+  return sorted.sort((a, b) => compareValues(a[key], b[key], direction))
+})
+
+const notificationPageCount = computed(() => Math.max(1, Math.ceil(sortedNotifications.value.length / notificationPageSize)))
+const paginatedNotifications = computed(() => {
+  const start = (notificationPage.value - 1) * notificationPageSize
+  return sortedNotifications.value.slice(start, start + notificationPageSize)
+})
+
+const sortNotifications = (key) => {
+  notificationSort.value = {
+    key,
+    direction: notificationSort.value.key === key && notificationSort.value.direction === 'asc' ? 'desc' : 'asc',
+  }
+  notificationPage.value = 1
+}
+
+const notificationSortLabel = (key) => {
+  if (notificationSort.value.key !== key) return ''
+  return notificationSort.value.direction === 'asc' ? '↑' : '↓'
+}
+
+const nextNotificationPage = () => {
+  notificationPage.value = Math.min(notificationPage.value + 1, notificationPageCount.value)
+}
+
+const previousNotificationPage = () => {
+  notificationPage.value = Math.max(notificationPage.value - 1, 1)
+}
+
 const sortedProperties = computed(() => {
   const sorted = [...filteredProperties.value]
   const { key, direction } = propertySort.value
@@ -1729,6 +1784,7 @@ watch([searchQuery, statusFilter], () => {
   installmentPage.value = 1
   activityPage.value = 1
   userPage.value = 1
+  notificationPage.value = 1
 })
 
 watch(propertyPageCount, (pageCount) => {
@@ -1761,6 +1817,10 @@ watch(userPageCount, (pageCount) => {
 
 watch(employeePageCount, (pageCount) => {
   employeePage.value = Math.min(employeePage.value, pageCount)
+})
+
+watch(notificationPageCount, (pageCount) => {
+  notificationPage.value = Math.min(notificationPage.value, pageCount)
 })
 
 const statusClass = (status) =>
@@ -2221,17 +2281,32 @@ onMounted(loadCurrentUser)
               <p class="eyebrow">الإشعارات</p>
               <h2>تنبيهات اليوم</h2>
             </div>
-            <Bell :size="22" />
+            <div class="panel-actions">
+              <button class="ghost-button" type="button" @click="sortNotifications('createdAt')">التاريخ {{ notificationSortLabel('createdAt') }}</button>
+              <button class="ghost-button" type="button" @click="sortNotifications('severity')">الأهمية {{ notificationSortLabel('severity') }}</button>
+            </div>
           </div>
           <div class="notification-list">
-            <p v-for="notification in visibleNotifications" :key="notification.id" :class="notification.severity">
+            <p v-for="notification in paginatedNotifications" :key="notification.id" :class="notification.severity">
               <strong>{{ notification.title }}</strong>
               <span>{{ notification.message }}</span>
             </p>
-            <p v-if="visibleNotifications.length === 0" class="info">
+            <p v-if="sortedNotifications.length === 0" class="info">
               <strong>لا توجد تنبيهات</strong>
-              <span>كل شيء مستقر حاليا.</span>
+              <span>لا توجد تنبيهات مطابقة للبحث الحالي.</span>
             </p>
+          </div>
+          <div class="pagination-bar">
+            <span>عرض {{ paginatedNotifications.length }} من {{ sortedNotifications.length }} تنبيه</span>
+            <div class="row-actions">
+              <button class="mini-button" type="button" :disabled="notificationPage === 1" @click="previousNotificationPage">
+                <ChevronRight :size="17" />
+              </button>
+              <span>{{ notificationPage }} / {{ notificationPageCount }}</span>
+              <button class="mini-button" type="button" :disabled="notificationPage === notificationPageCount" @click="nextNotificationPage">
+                <ChevronLeft :size="17" />
+              </button>
+            </div>
           </div>
         </article>
 
