@@ -935,7 +935,20 @@ const deleteContract = (contract) => {
 const payInstallment = (installment) => {
   if (installment.status === 'مدفوع') return
 
-  apiRequest(`/installments/${installment.id}/pay`, { method: 'POST' })
+  const remaining = Math.max(0, Number(installment.amount || 0) - Number(installment.paidAmount || 0))
+  const enteredAmount = window.prompt(`أدخل مبلغ التسديد للقسط ${installment.number}`, String(remaining))
+  if (enteredAmount === null) return
+
+  const amount = Number(String(enteredAmount).replaceAll(',', ''))
+  if (!Number.isFinite(amount) || amount <= 0 || amount > remaining) {
+    showSuccess(`مبلغ التسديد يجب أن يكون بين 1 و ${formatMoney(remaining)}.`)
+    return
+  }
+
+  apiRequest(`/installments/${installment.id}/pay`, {
+    method: 'POST',
+    body: JSON.stringify({ amount }),
+  })
     .then(() => Promise.all([
       apiRequest('/contracts'),
       apiRequest('/installments'),
@@ -954,7 +967,7 @@ const payInstallment = (installment) => {
       installmentsReport.value = serverInstallmentsReport
       notifications.value = serverNotifications
       apiOnline.value = true
-      showSuccess(`تم تسديد القسط ${installment.number} للعقد ${installment.contractCode}.`)
+      showSuccess(`تم تسديد ${formatMoney(amount)} من القسط ${installment.number} للعقد ${installment.contractCode}.`)
     })
     .catch((error) => {
       apiOnline.value = false
@@ -2610,7 +2623,7 @@ onMounted(loadCurrentUser)
                 <span>القسط {{ installment.number }} · {{ installment.dueDate }}</span>
               </div>
               <div class="row-actions">
-                <small>{{ formatMoney(installment.amount) }} · {{ installment.status }}</small>
+                <small>{{ formatMoney(installment.paidAmount || 0) }} / {{ formatMoney(installment.amount) }} · متبقي {{ formatMoney(Math.max(0, Number(installment.amount || 0) - Number(installment.paidAmount || 0))) }} · {{ installment.status }}</small>
                 <button
                   v-if="hasPermission('vouchers.manage')"
                   class="mini-button"
