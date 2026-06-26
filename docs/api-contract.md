@@ -35,6 +35,16 @@ Authorization: Bearer {token}
 
 Sensitive actions additionally require matching user permissions such as `users.manage`, `properties.create`, `properties.update`, `properties.approve`, `clients.manage`, `contracts.create`, `contracts.print`, `vouchers.manage`, `reports.view`, or `settings.update`. The `system_admin` role bypasses individual permission checks.
 
+## Operations
+
+`GET /api/health`
+
+Public lightweight service check.
+
+`GET /api/readiness`
+
+Requires `settings.update`. Returns deployment readiness checks for database connectivity, public storage writability, `storage:link`, `APP_KEY`, `APP_DEBUG`, `APP_URL`, and admin user presence.
+
 ## Users
 
 `GET /api/access-control`

@@ -751,6 +751,23 @@ td .row-actions {
   color: var(--danger);
 }
 
+.readiness-row {
+  align-items: flex-start;
+}
+
+.readiness-check {
+  display: block;
+  line-height: 1.6;
+}
+
+.readiness-check.is-ok {
+  color: var(--success);
+}
+
+.readiness-check.is-warning {
+  color: var(--danger);
+}
+
 .list-row div,
 .contract-card div {
   display: grid;

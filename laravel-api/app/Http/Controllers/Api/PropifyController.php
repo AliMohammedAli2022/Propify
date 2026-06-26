@@ -24,6 +24,7 @@ use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\Rule;
 use Illuminate\Support\Str;
+use Throwable;
 
 class PropifyController extends Controller
 {
@@ -39,6 +40,71 @@ class PropifyController extends Controller
             'service' => 'propify-laravel-api',
             'database' => config('database.connections.mysql.database'),
         ]);
+    }
+
+    public function readiness(Request $request): JsonResponse
+    {
+        if ($guard = $this->guard($request, 'settings.update')) {
+            return $guard;
+        }
+
+        $checks = [
+            'database' => $this->readinessCheck('قاعدة البيانات', function () {
+                DB::select('select 1');
+
+                return 'الاتصال يعمل';
+            }),
+            'storage' => $this->readinessCheck('تخزين الملفات', function () {
+                $path = 'readiness/.propify-check';
+                Storage::disk('public')->put($path, (string) now());
+                Storage::disk('public')->delete($path);
+
+                return 'قراءة وكتابة public disk تعمل';
+            }),
+            'storageLink' => $this->readinessCheck('رابط التخزين العام', function () {
+                if (! file_exists(public_path('storage'))) {
+                    throw new \RuntimeException('نفذ php artisan storage:link');
+                }
+
+                return 'public/storage موجود';
+            }),
+            'appKey' => [
+                'label' => 'مفتاح التطبيق',
+                'ok' => filled(config('app.key')),
+                'message' => filled(config('app.key')) ? 'APP_KEY مضبوط' : 'نفذ php artisan key:generate',
+            ],
+            'debug' => [
+                'label' => 'وضع التصحيح',
+                'ok' => ! config('app.debug'),
+                'message' => config('app.debug') ? 'عطّل APP_DEBUG في الإنتاج' : 'APP_DEBUG=false',
+            ],
+            'appUrl' => [
+                'label' => 'رابط API',
+                'ok' => str_starts_with((string) config('app.url'), 'https://') || app()->environment('local', 'testing'),
+                'message' => (string) config('app.url'),
+            ],
+            'adminUser' => [
+                'label' => 'مستخدم مدير',
+                'ok' => User::where('role', 'system_admin')->exists(),
+                'message' => User::where('role', 'system_admin')->exists() ? 'يوجد مدير نظام' : 'أنشئ مدير نظام قبل التشغيل',
+            ],
+        ];
+
+        $ok = collect($checks)->every(fn (array $check) => $check['ok']);
+
+        return $this->json([
+            'ok' => $ok,
+            'environment' => app()->environment(),
+            'checkedAt' => now()->toISOString(),
+            'counts' => [
+                'users' => User::count(),
+                'properties' => Property::count(),
+                'clients' => Client::count(),
+                'contracts' => Contract::count(),
+                'vouchers' => Voucher::count(),
+            ],
+            'checks' => $checks,
+        ], $ok ? 200 : 207);
     }
 
     public function login(Request $request): JsonResponse
@@ -1528,6 +1594,23 @@ HTML;
                 $builder->orWhere($column, 'like', "%{$search}%");
             }
         });
+    }
+
+    private function readinessCheck(string $label, callable $callback): array
+    {
+        try {
+            return [
+                'label' => $label,
+                'ok' => true,
+                'message' => (string) $callback(),
+            ];
+        } catch (Throwable $exception) {
+            return [
+                'label' => $label,
+                'ok' => false,
+                'message' => $exception->getMessage(),
+            ];
+        }
     }
 
     private function userRules(?User $user = null): array

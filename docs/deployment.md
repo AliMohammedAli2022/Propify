@@ -113,6 +113,8 @@ https://api.propify.com/storage/properties/{propertyCode}/...
 curl https://api.propify.com/api/health
 ```
 
+ومن داخل لوحة الإدارة افتح الإعدادات وراجع صف `جاهزية النشر`. يجب أن تكون فحوصات قاعدة البيانات والتخزين و`APP_KEY` والمدير جاهزة قبل الاعتماد.
+
 ثم من المتصفح:
 
 - افتح `https://app.propify.com`.

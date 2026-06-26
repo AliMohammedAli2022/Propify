@@ -200,6 +200,7 @@ const installmentsReport = ref(null)
 const employeePerformanceReport = ref(null)
 const notifications = ref([])
 const activityLogs = ref([])
+const deploymentReadiness = ref(null)
 const propertyMedia = ref([])
 const mediaErrors = ref({})
 const mediaForm = ref({
@@ -390,6 +391,7 @@ const loadApiData = async () => {
       serverActivityLogs,
       serverSettings,
       serverAccessControl,
+      serverReadiness,
     ] = await Promise.all([
       apiRequest('/properties'),
       optionalApiRequest('/clients', []),
@@ -406,6 +408,7 @@ const loadApiData = async () => {
       optionalApiRequest('/activity-logs', []),
       optionalApiRequest('/settings', settingsForm.value),
       optionalApiRequest('/access-control', null),
+      optionalApiRequest('/readiness', null),
     ])
     properties.value = serverProperties
     clients.value = serverClients
@@ -420,6 +423,7 @@ const loadApiData = async () => {
     employeePerformanceReport.value = serverEmployeePerformanceReport
     notifications.value = serverNotifications
     activityLogs.value = serverActivityLogs
+    deploymentReadiness.value = serverReadiness
     settingsForm.value = { ...settingsForm.value, ...serverSettings }
     if (serverAccessControl) {
       availablePermissions.value = serverAccessControl.permissions.map((permission) => ({
@@ -3030,6 +3034,16 @@ onMounted(loadCurrentUser)
                 <span>{{ API_BASE_URL }}</span>
               </div>
               <small>{{ apiOnline ? 'متصل' : 'غير متصل' }}</small>
+            </div>
+            <div v-if="deploymentReadiness" class="list-row readiness-row">
+              <div>
+                <strong>جاهزية النشر</strong>
+                <span>{{ deploymentReadiness.environment }} · {{ Object.values(deploymentReadiness.checks || {}).filter((check) => check.ok).length }} / {{ Object.values(deploymentReadiness.checks || {}).length }} فحوصات ناجحة</span>
+                <small v-for="check in Object.values(deploymentReadiness.checks || {})" :key="check.label" :class="['readiness-check', check.ok ? 'is-ok' : 'is-warning']">
+                  {{ check.ok ? '✓' : '!' }} {{ check.label }}: {{ check.message }}
+                </small>
+              </div>
+              <small>{{ deploymentReadiness.ok ? 'جاهز' : 'يحتاج مراجعة' }}</small>
             </div>
             <div class="list-row">
               <div>
