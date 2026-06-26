@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\AppSetting;
 use App\Models\Client;
 use App\Models\Contract;
 use App\Models\Installment;
@@ -677,6 +678,32 @@ class PropifyController extends Controller
         );
     }
 
+    public function settings(): JsonResponse
+    {
+        return $this->json($this->settingsResource($this->appSettings()));
+    }
+
+    public function updateSettings(Request $request): JsonResponse
+    {
+        $validator = Validator::make($request->all(), [
+            'companyName' => ['required', 'string', 'max:120'],
+            'companyPhone' => ['nullable', 'string', 'max:40'],
+            'companyEmail' => ['nullable', 'email', 'max:120'],
+            'companyAddress' => ['nullable', 'string', 'max:180'],
+            'defaultCurrency' => ['required', 'string', 'max:30'],
+            'defaultCommissionRate' => ['required', 'numeric', 'min:0', 'max:100'],
+        ], $this->messages());
+
+        if ($validator->fails()) {
+            return $this->json(['message' => 'Validation failed', 'errors' => $validator->errors()], 422);
+        }
+
+        $settings = $this->appSettings();
+        $settings->update($this->settingsData($request));
+
+        return $this->json($this->settingsResource($settings->refresh()));
+    }
+
     public function financialReport(Request $request)
     {
         $ledgerQuery = LedgerEntry::query();
@@ -820,7 +847,13 @@ class PropifyController extends Controller
 
     private function documentResponse(string $title, string $body)
     {
+        $settings = $this->appSettings();
         $safeTitle = e($title);
+        $companyName = e($settings->company_name);
+        $companyMeta = collect([$settings->company_phone, $settings->company_email, $settings->company_address])
+            ->filter()
+            ->map(fn (string $item) => e($item))
+            ->implode(' · ');
         $printedAt = now()->format('Y-m-d H:i');
         $html = <<<HTML
 <!doctype html>
@@ -846,8 +879,9 @@ class PropifyController extends Controller
 <body>
     <header>
         <div>
-            <h1>Propify</h1>
+            <h1>{$companyName}</h1>
             <strong>{$safeTitle}</strong>
+            <div class="meta">{$companyMeta}</div>
         </div>
         <div class="meta">تاريخ الطباعة: {$printedAt}</div>
     </header>
@@ -879,6 +913,42 @@ HTML;
         $items = collect($labels)->map(fn (string $label) => '<div>'.e($label).'</div>')->implode('');
 
         return "<div class=\"signatures\">{$items}</div>";
+    }
+
+    private function appSettings(): AppSetting
+    {
+        return AppSetting::query()->firstOrCreate([], [
+            'company_name' => 'Propify',
+            'company_phone' => '07700000000',
+            'company_email' => 'office@propify.local',
+            'company_address' => 'بغداد - العراق',
+            'default_currency' => 'دينار',
+            'default_commission_rate' => 2,
+        ]);
+    }
+
+    private function settingsData(Request $request): array
+    {
+        return [
+            'company_name' => $request->string('companyName'),
+            'company_phone' => $request->input('companyPhone'),
+            'company_email' => $request->input('companyEmail'),
+            'company_address' => $request->input('companyAddress'),
+            'default_currency' => $request->string('defaultCurrency'),
+            'default_commission_rate' => $request->input('defaultCommissionRate'),
+        ];
+    }
+
+    private function settingsResource(AppSetting $settings): array
+    {
+        return [
+            'companyName' => $settings->company_name,
+            'companyPhone' => $settings->company_phone,
+            'companyEmail' => $settings->company_email,
+            'companyAddress' => $settings->company_address,
+            'defaultCurrency' => $settings->default_currency,
+            'defaultCommissionRate' => (float) $settings->default_commission_rate,
+        ];
     }
 
     private function json(mixed $data, int $status = 200): JsonResponse
@@ -1008,7 +1078,7 @@ HTML;
     {
         $total = $this->money($request->input('total'));
         $paid = $this->money($request->input('paid', 0));
-        $commissionRate = (float) $request->input('commissionRate', 0);
+        $commissionRate = (float) $request->input('commissionRate', $this->appSettings()->default_commission_rate);
 
         return [
             'property_code' => $request->string('propertyCode'),

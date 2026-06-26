@@ -267,6 +267,25 @@ Response item:
 }
 ```
 
+## Settings
+
+`GET /api/settings`
+
+`PUT /api/settings`
+
+```json
+{
+  "companyName": "Propify",
+  "companyPhone": "07700000000",
+  "companyEmail": "office@propify.local",
+  "companyAddress": "بغداد - العراق",
+  "defaultCurrency": "دينار",
+  "defaultCommissionRate": 2
+}
+```
+
+The printable contract and voucher documents use these settings in their header.
+
 ## Reports
 
 - `GET /api/reports/properties`

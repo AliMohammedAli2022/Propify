@@ -154,6 +154,15 @@ const mediaForm = ref({
   propertyCode: '',
   files: [],
 })
+const settingsErrors = ref({})
+const settingsForm = ref({
+  companyName: 'Propify',
+  companyPhone: '07700000000',
+  companyEmail: 'office@propify.local',
+  companyAddress: 'بغداد - العراق',
+  defaultCurrency: 'دينار',
+  defaultCommissionRate: 2,
+})
 
 const iraqiPhonePattern = /^(075|077|078|079)[0-9]{8}$/
 const nationalIdPattern = /^[A-Za-z0-9]{12,}$/
@@ -285,6 +294,7 @@ const loadApiData = async () => {
       serverPropertiesReport,
       serverInstallmentsReport,
       serverNotifications,
+      serverSettings,
     ] = await Promise.all([
       apiRequest('/properties'),
       apiRequest('/clients'),
@@ -297,6 +307,7 @@ const loadApiData = async () => {
       apiRequest('/reports/properties'),
       apiRequest('/reports/installments'),
       apiRequest('/notifications'),
+      apiRequest('/settings'),
     ])
     properties.value = serverProperties
     clients.value = serverClients
@@ -309,6 +320,7 @@ const loadApiData = async () => {
     propertiesReport.value = serverPropertiesReport
     installmentsReport.value = serverInstallmentsReport
     notifications.value = serverNotifications
+    settingsForm.value = { ...settingsForm.value, ...serverSettings }
     if (!mediaForm.value.propertyCode && serverProperties.length > 0) {
       mediaForm.value.propertyCode = serverProperties[0].code
       await loadPropertyMedia(serverProperties[0].code)
@@ -363,6 +375,24 @@ const uploadPropertyMedia = () => {
     .catch((error) => {
       apiOnline.value = false
       mediaErrors.value = error.errors || {}
+    })
+}
+
+const saveSettings = () => {
+  settingsErrors.value = {}
+
+  apiRequest('/settings', {
+    method: 'PUT',
+    body: JSON.stringify(settingsForm.value),
+  })
+    .then((savedSettings) => {
+      settingsForm.value = { ...settingsForm.value, ...savedSettings }
+      apiOnline.value = true
+      showSuccess('تم تحديث إعدادات المكتب بنجاح.')
+    })
+    .catch((error) => {
+      apiOnline.value = false
+      settingsErrors.value = error.errors || {}
     })
 }
 
@@ -753,7 +783,7 @@ const resetContractForm = () => {
   contractForm.value.kind = 'بيع نقدي'
   contractForm.value.total = ''
   contractForm.value.paid = ''
-  contractForm.value.commissionRate = 2
+  contractForm.value.commissionRate = settingsForm.value.defaultCommissionRate || 2
   contractForm.value.installmentsCount = 12
   contractForm.value.status = 'نشط'
   editingContractCode.value = ''
@@ -1216,7 +1246,7 @@ onMounted(loadCurrentUser)
     <main class="workspace">
       <header class="topbar">
         <div>
-          <p class="eyebrow">Propify Real Estate OS</p>
+          <p class="eyebrow">{{ settingsForm.companyName }} Real Estate OS</p>
           <h1>{{ activeSectionLabel }}</h1>
         </div>
         <div class="toolbar">
@@ -1818,11 +1848,51 @@ onMounted(loadCurrentUser)
           <div class="panel-header">
             <div>
               <p class="eyebrow">الإعدادات</p>
-              <h2>حالة النظام</h2>
+              <h2>بيانات المكتب وحالة النظام</h2>
             </div>
             <Settings :size="22" />
           </div>
+          <form class="smart-form settings-form" @submit.prevent="saveSettings">
+            <label>
+              <span>اسم المكتب</span>
+              <input v-model="settingsForm.companyName" placeholder="Propify" />
+              <small v-if="settingsErrors.companyName" class="field-error"><AlertCircle :size="14" />{{ settingsErrors.companyName[0] }}</small>
+            </label>
+            <label>
+              <span>الهاتف</span>
+              <input v-model="settingsForm.companyPhone" placeholder="07700000000" />
+              <small v-if="settingsErrors.companyPhone" class="field-error"><AlertCircle :size="14" />{{ settingsErrors.companyPhone[0] }}</small>
+            </label>
+            <label>
+              <span>البريد</span>
+              <input v-model="settingsForm.companyEmail" type="email" placeholder="office@propify.local" />
+              <small v-if="settingsErrors.companyEmail" class="field-error"><AlertCircle :size="14" />{{ settingsErrors.companyEmail[0] }}</small>
+            </label>
+            <label>
+              <span>العنوان</span>
+              <input v-model="settingsForm.companyAddress" placeholder="بغداد - العراق" />
+              <small v-if="settingsErrors.companyAddress" class="field-error"><AlertCircle :size="14" />{{ settingsErrors.companyAddress[0] }}</small>
+            </label>
+            <label>
+              <span>العملة الافتراضية</span>
+              <input v-model="settingsForm.defaultCurrency" placeholder="دينار" />
+              <small v-if="settingsErrors.defaultCurrency" class="field-error"><AlertCircle :size="14" />{{ settingsErrors.defaultCurrency[0] }}</small>
+            </label>
+            <label>
+              <span>نسبة العمولة الافتراضية</span>
+              <input v-model="settingsForm.defaultCommissionRate" type="number" min="0" max="100" step="0.1" />
+              <small v-if="settingsErrors.defaultCommissionRate" class="field-error"><AlertCircle :size="14" />{{ settingsErrors.defaultCommissionRate[0] }}</small>
+            </label>
+            <button class="submit-button" type="submit"><Save :size="18" /> حفظ الإعدادات</button>
+          </form>
           <div class="stack-list">
+            <div class="list-row">
+              <div>
+                <strong>بيانات الطباعة</strong>
+                <span>{{ settingsForm.companyPhone || '-' }} · {{ settingsForm.companyAddress || '-' }}</span>
+              </div>
+              <small>{{ settingsForm.defaultCurrency }}</small>
+            </div>
             <div class="list-row">
               <div>
                 <strong>واجهة API</strong>

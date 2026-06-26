@@ -39,6 +39,8 @@ Route::delete('/vouchers/{voucher:code}', [PropifyController::class, 'deleteVouc
 Route::get('/vouchers/{voucher:code}/print', [PropifyController::class, 'printVoucher']);
 Route::get('/ledger', [PropifyController::class, 'ledger']);
 Route::get('/notifications', [PropifyController::class, 'notifications']);
+Route::get('/settings', [PropifyController::class, 'settings']);
+Route::put('/settings', [PropifyController::class, 'updateSettings']);
 Route::get('/reports/financial', [PropifyController::class, 'financialReport']);
 Route::get('/reports/properties', [PropifyController::class, 'propertiesReport']);
 Route::get('/reports/installments', [PropifyController::class, 'installmentsReport']);

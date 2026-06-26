@@ -2,6 +2,7 @@
 
 namespace Database\Seeders;
 
+use App\Models\AppSetting;
 use App\Models\Client;
 use App\Models\Contract;
 use App\Models\Installment;
@@ -21,6 +22,15 @@ class DatabaseSeeder extends Seeder
      */
     public function run(): void
     {
+        AppSetting::query()->create([
+            'company_name' => 'Propify',
+            'company_phone' => '07700000000',
+            'company_email' => 'office@propify.local',
+            'company_address' => 'بغداد - العراق',
+            'default_currency' => 'دينار',
+            'default_commission_rate' => 2,
+        ]);
+
         \App\Models\User::factory()->create([
             'name' => 'علي محمد',
             'email' => 'admin@propify.local',
