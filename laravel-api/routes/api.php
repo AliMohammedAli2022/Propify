@@ -25,6 +25,8 @@ Route::put('/clients/{client}', [PropifyController::class, 'updateClient']);
 Route::delete('/clients/{client}', [PropifyController::class, 'deleteClient']);
 Route::get('/contracts', [PropifyController::class, 'contracts']);
 Route::post('/contracts', [PropifyController::class, 'storeContract']);
+Route::put('/contracts/{contract:code}', [PropifyController::class, 'updateContract']);
+Route::delete('/contracts/{contract:code}', [PropifyController::class, 'deleteContract']);
 Route::get('/installments', [PropifyController::class, 'installments']);
 Route::post('/installments/{installment}/pay', [PropifyController::class, 'payInstallment']);
 Route::get('/vouchers', [PropifyController::class, 'vouchers']);

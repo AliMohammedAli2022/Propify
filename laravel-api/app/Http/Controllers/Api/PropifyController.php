@@ -322,35 +322,15 @@ class PropifyController extends Controller
 
     public function storeContract(Request $request): JsonResponse
     {
-        $validator = Validator::make($request->all(), [
-            'propertyCode' => ['required', 'string'],
-            'client' => ['required', 'string'],
-            'kind' => ['required', 'string'],
-            'total' => ['required', 'numeric', 'gt:0'],
-            'paid' => ['nullable', 'numeric', 'min:0', 'lte:total'],
-            'commissionRate' => ['nullable', 'numeric', 'min:0'],
-            'installmentsCount' => ['nullable', 'integer', 'min:1'],
-            'status' => ['nullable', 'string'],
-        ], $this->messages());
+        $validator = Validator::make($request->all(), $this->contractRules(), $this->messages());
 
         if ($validator->fails()) {
             return $this->json(['message' => 'Validation failed', 'errors' => $validator->errors()], 422);
         }
 
-        $total = $this->money($request->input('total'));
-        $paid = $this->money($request->input('paid', 0));
-        $commissionRate = (float) $request->input('commissionRate', 0);
-
         $contract = Contract::create([
             'code' => $this->nextCode(Contract::class, 'CT', 43),
-            'property_code' => $request->string('propertyCode'),
-            'client' => $request->string('client'),
-            'kind' => $request->string('kind'),
-            'total' => $total,
-            'paid' => $paid,
-            'due' => $total - $paid,
-            'commission' => round($total * ($commissionRate / 100)),
-            'status' => $request->input('status', 'نشط'),
+            ...$this->contractData($request),
         ]);
 
         if ($contract->kind === 'تقسيط') {
@@ -370,6 +350,42 @@ class PropifyController extends Controller
         }
 
         return $this->json($this->contractResource($contract), 201);
+    }
+
+    public function updateContract(Request $request, Contract $contract): JsonResponse
+    {
+        $validator = Validator::make($request->all(), $this->contractRules(), $this->messages());
+
+        if ($validator->fails()) {
+            return $this->json(['message' => 'Validation failed', 'errors' => $validator->errors()], 422);
+        }
+
+        $paidInstallments = Installment::where('contract_code', $contract->code)->where('paid_amount', '>', 0)->exists();
+        if ($paidInstallments && $request->input('kind') !== $contract->kind) {
+            return $this->json([
+                'message' => 'لا يمكن تغيير نوع عقد لديه أقساط مدفوعة.',
+                'errors' => ['kind' => ['لا يمكن تغيير نوع عقد لديه أقساط مدفوعة.']],
+            ], 409);
+        }
+
+        $contract->update($this->contractData($request));
+
+        return $this->json($this->contractResource($contract->refresh()));
+    }
+
+    public function deleteContract(Contract $contract): JsonResponse
+    {
+        if (Voucher::where('contract_code', $contract->code)->exists()) {
+            return $this->json([
+                'message' => 'لا يمكن حذف عقد مرتبط بسندات.',
+                'errors' => ['contract' => ['لا يمكن حذف عقد مرتبط بسندات.']],
+            ], 409);
+        }
+
+        Installment::where('contract_code', $contract->code)->delete();
+        $contract->delete();
+
+        return $this->json(['ok' => true]);
     }
 
     public function installments(Request $request): JsonResponse
@@ -711,6 +727,38 @@ class PropifyController extends Controller
             'national_id' => $request->string('nationalId'),
             'stage' => $request->input('stage', 'عميل محتمل'),
             'source' => $request->input('source', 'الموقع'),
+        ];
+    }
+
+    private function contractRules(): array
+    {
+        return [
+            'propertyCode' => ['required', 'string'],
+            'client' => ['required', 'string'],
+            'kind' => ['required', 'string'],
+            'total' => ['required', 'numeric', 'gt:0'],
+            'paid' => ['nullable', 'numeric', 'min:0', 'lte:total'],
+            'commissionRate' => ['nullable', 'numeric', 'min:0'],
+            'installmentsCount' => ['nullable', 'integer', 'min:1'],
+            'status' => ['nullable', 'string'],
+        ];
+    }
+
+    private function contractData(Request $request): array
+    {
+        $total = $this->money($request->input('total'));
+        $paid = $this->money($request->input('paid', 0));
+        $commissionRate = (float) $request->input('commissionRate', 0);
+
+        return [
+            'property_code' => $request->string('propertyCode'),
+            'client' => $request->string('client'),
+            'kind' => $request->string('kind'),
+            'total' => $total,
+            'paid' => $paid,
+            'due' => $total - $paid,
+            'commission' => round($total * ($commissionRate / 100)),
+            'status' => $request->input('status', 'نشط'),
         ];
     }
 

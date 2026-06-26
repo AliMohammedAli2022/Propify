@@ -641,6 +641,7 @@ const contractForm = ref({
   installmentsCount: 12,
   status: 'نشط',
 })
+const editingContractCode = ref('')
 
 const validateContract = () => {
   const errors = {}
@@ -670,18 +671,26 @@ const addContract = () => {
     installmentsCount: Number(contractForm.value.installmentsCount || 1),
   }
 
-  apiRequest('/contracts', {
-    method: 'POST',
+  const endpoint = editingContractCode.value ? `/contracts/${editingContractCode.value}` : '/contracts'
+  const method = editingContractCode.value ? 'PUT' : 'POST'
+
+  apiRequest(endpoint, {
+    method,
     body: JSON.stringify(payload),
   })
     .then((createdContract) => {
-      contracts.value.unshift(createdContract)
+      if (editingContractCode.value) {
+        contracts.value = contracts.value.map((contract) => (contract.code === createdContract.code ? createdContract : contract))
+      } else {
+        contracts.value.unshift(createdContract)
+      }
       return apiRequest('/installments')
     })
     .then((serverInstallments) => {
       installments.value = serverInstallments
       apiOnline.value = true
-      showSuccess('تم إنشاء العقد وتحديث جدول الأقساط.')
+      showSuccess(editingContractCode.value ? 'تم تحديث بيانات العقد.' : 'تم إنشاء العقد وتحديث جدول الأقساط.')
+      resetContractForm()
     })
     .catch((error) => {
       apiOnline.value = false
@@ -689,15 +698,66 @@ const addContract = () => {
         contractErrors.value = error.errors
         return
       }
-      contracts.value.unshift({ ...payload, code: `LOCAL-${Date.now()}`, due: payload.total - payload.paid, commission: Math.round(payload.total * (payload.commissionRate / 100)) })
-      showSuccess('تمت إضافة العقد محلياً. شغّل API لحفظه في السيرفر.')
+      if (!editingContractCode.value) {
+        contracts.value.unshift({ ...payload, code: `LOCAL-${Date.now()}`, due: payload.total - payload.paid, commission: Math.round(payload.total * (payload.commissionRate / 100)) })
+        showSuccess('تمت إضافة العقد محلياً. شغّل API لحفظه في السيرفر.')
+      }
     })
+}
 
+const resetContractForm = () => {
   contractForm.value.propertyCode = ''
   contractForm.value.client = ''
+  contractForm.value.kind = 'بيع نقدي'
   contractForm.value.total = ''
   contractForm.value.paid = ''
+  contractForm.value.commissionRate = 2
   contractForm.value.installmentsCount = 12
+  contractForm.value.status = 'نشط'
+  editingContractCode.value = ''
+}
+
+const startEditContract = (contract) => {
+  if (!contract.code?.startsWith('CT-')) {
+    showSuccess('هذا العقد محلي فقط، أعد تحميل API قبل تعديله.')
+    return
+  }
+
+  editingContractCode.value = contract.code
+  contractForm.value.propertyCode = contract.propertyCode
+  contractForm.value.client = contract.client
+  contractForm.value.kind = contract.kind
+  contractForm.value.total = String(contract.total || '')
+  contractForm.value.paid = String(contract.paid || '')
+  contractForm.value.commissionRate = contract.total ? Number(((Number(contract.commission || 0) / Number(contract.total || 1)) * 100).toFixed(2)) : 2
+  contractForm.value.installmentsCount = 12
+  contractForm.value.status = contract.status
+  activeSection.value = 'contracts'
+  showSuccess(`تم تحميل العقد ${contract.code} للتعديل.`)
+}
+
+const deleteContract = (contract) => {
+  if (!contract.code?.startsWith('CT-')) {
+    contracts.value = contracts.value.filter((item) => item.code !== contract.code)
+    showSuccess(`تم حذف العقد المحلي ${contract.code}.`)
+    return
+  }
+
+  if (!window.confirm(`هل تريد حذف العقد ${contract.code}؟`)) return
+
+  apiRequest(`/contracts/${contract.code}`, { method: 'DELETE' })
+    .then(() => {
+      contracts.value = contracts.value.filter((item) => item.code !== contract.code)
+      installments.value = installments.value.filter((item) => item.contractCode !== contract.code)
+      apiOnline.value = true
+      showSuccess(`تم حذف العقد ${contract.code}.`)
+      return loadApiData()
+    })
+    .catch((error) => {
+      apiOnline.value = false
+      const message = error.errors?.contract?.[0] || 'تعذر حذف العقد.'
+      showSuccess(message)
+    })
 }
 
 const payInstallment = (installment) => {
@@ -1304,7 +1364,8 @@ onMounted(loadCurrentUser)
                 <option>شهري</option>
               </select>
             </label>
-            <button class="submit-button" type="submit"><Plus :size="18" /> إنشاء العقد</button>
+            <button class="submit-button" type="submit"><Plus :size="18" /> {{ editingContractCode ? 'حفظ التعديل' : 'إنشاء العقد' }}</button>
+            <button v-if="editingContractCode" class="text-button ghost-button" type="button" @click="resetContractForm">إلغاء التعديل</button>
           </form>
         </article>
       </section>
@@ -1430,6 +1491,8 @@ onMounted(loadCurrentUser)
               <button class="mini-button" type="button" title="طباعة العقد" @click="printContract(contract)">
                 <Printer :size="17" />
               </button>
+              <button class="mini-button" type="button" title="تعديل العقد" @click="startEditContract(contract)">ت</button>
+              <button class="mini-button danger-action" type="button" title="حذف العقد" @click="deleteContract(contract)">×</button>
             </div>
           </div>
         </article>

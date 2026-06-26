@@ -149,6 +149,10 @@ Validation:
 
 `POST /api/contracts`
 
+`PUT /api/contracts/{code}`
+
+`DELETE /api/contracts/{code}`
+
 ```json
 {
   "property_id": 1,
