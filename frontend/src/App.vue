@@ -39,6 +39,9 @@ const propertyPageSize = 8
 const clientSort = ref({ key: 'name', direction: 'asc' })
 const clientPage = ref(1)
 const clientPageSize = 6
+const contractSort = ref({ key: 'code', direction: 'desc' })
+const contractPage = ref(1)
+const contractPageSize = 5
 const apiOnline = ref(false)
 const authToken = ref(localStorage.getItem('propify.authToken') || '')
 const currentUser = ref(null)
@@ -1235,6 +1238,67 @@ const previousClientPage = () => {
   clientPage.value = Math.max(clientPage.value - 1, 1)
 }
 
+const filteredContracts = computed(() => {
+  const query = searchQuery.value.trim().toLowerCase()
+
+  return contracts.value.filter((contract) => {
+    const searchable = [
+      contract.code,
+      contract.client,
+      contract.kind,
+      contract.status,
+      contract.propertyCode,
+      contract.total,
+      contract.paid,
+      contract.due,
+    ]
+      .join(' ')
+      .toLowerCase()
+
+    return !query || searchable.includes(query)
+  })
+})
+
+const sortedContracts = computed(() => {
+  const sorted = [...filteredContracts.value]
+  const { key, direction } = contractSort.value
+
+  return sorted.sort((a, b) => {
+    const numericKeys = ['total', 'paid', 'due', 'commission']
+    const first = numericKeys.includes(key) ? Number(a[key] || 0) : a[key]
+    const second = numericKeys.includes(key) ? Number(b[key] || 0) : b[key]
+
+    return compareValues(first, second, direction)
+  })
+})
+
+const contractPageCount = computed(() => Math.max(1, Math.ceil(sortedContracts.value.length / contractPageSize)))
+const paginatedContracts = computed(() => {
+  const start = (contractPage.value - 1) * contractPageSize
+  return sortedContracts.value.slice(start, start + contractPageSize)
+})
+
+const sortContracts = (key) => {
+  contractSort.value = {
+    key,
+    direction: contractSort.value.key === key && contractSort.value.direction === 'asc' ? 'desc' : 'asc',
+  }
+  contractPage.value = 1
+}
+
+const contractSortLabel = (key) => {
+  if (contractSort.value.key !== key) return ''
+  return contractSort.value.direction === 'asc' ? '↑' : '↓'
+}
+
+const nextContractPage = () => {
+  contractPage.value = Math.min(contractPage.value + 1, contractPageCount.value)
+}
+
+const previousContractPage = () => {
+  contractPage.value = Math.max(contractPage.value - 1, 1)
+}
+
 const downloadFile = (filename, content, type = 'text/csv;charset=utf-8', withBom = true) => {
   const blob = new Blob([withBom ? '\ufeff' : '', content], { type })
   const url = URL.createObjectURL(blob)
@@ -1377,6 +1441,7 @@ watch(
 watch([searchQuery, statusFilter], () => {
   propertyPage.value = 1
   clientPage.value = 1
+  contractPage.value = 1
 })
 
 watch(propertyPageCount, (pageCount) => {
@@ -1385,6 +1450,10 @@ watch(propertyPageCount, (pageCount) => {
 
 watch(clientPageCount, (pageCount) => {
   clientPage.value = Math.min(clientPage.value, pageCount)
+})
+
+watch(contractPageCount, (pageCount) => {
+  contractPage.value = Math.min(contractPage.value, pageCount)
 })
 
 const statusClass = (status) =>
@@ -1885,10 +1954,13 @@ onMounted(loadCurrentUser)
               <p class="eyebrow">العقود</p>
               <h2>البيع، الإيجار، التقسيط</h2>
             </div>
-            <FileText :size="22" />
+            <div class="panel-actions">
+              <button class="ghost-button" type="button" @click="sortContracts('code')">الرقم {{ contractSortLabel('code') }}</button>
+              <button class="ghost-button" type="button" @click="sortContracts('due')">المتبقي {{ contractSortLabel('due') }}</button>
+            </div>
           </div>
           <div class="contracts">
-            <div v-for="contract in contracts" :key="contract.code" class="contract-card">
+            <div v-for="contract in paginatedContracts" :key="contract.code" class="contract-card">
               <FileText :size="22" />
               <div>
                 <strong>{{ contract.code }}</strong>
@@ -1904,6 +1976,19 @@ onMounted(loadCurrentUser)
                 </button>
               <button v-if="hasPermission('contracts.create')" class="mini-button" type="button" title="تعديل العقد" @click="startEditContract(contract)">ت</button>
               <button v-if="hasPermission('contracts.create')" class="mini-button danger-action" type="button" title="حذف العقد" @click="deleteContract(contract)">×</button>
+            </div>
+            <p v-if="sortedContracts.length === 0" class="empty-note">لا توجد عقود مطابقة للبحث الحالي.</p>
+          </div>
+          <div class="pagination-bar">
+            <span>عرض {{ paginatedContracts.length }} من {{ sortedContracts.length }} عقد</span>
+            <div class="row-actions">
+              <button class="mini-button" type="button" :disabled="contractPage === 1" @click="previousContractPage">
+                <ChevronRight :size="17" />
+              </button>
+              <span>{{ contractPage }} / {{ contractPageCount }}</span>
+              <button class="mini-button" type="button" :disabled="contractPage === contractPageCount" @click="nextContractPage">
+                <ChevronLeft :size="17" />
+              </button>
             </div>
           </div>
         </article>
