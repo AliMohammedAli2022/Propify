@@ -45,6 +45,9 @@ const contractPageSize = 5
 const voucherSort = ref({ key: 'code', direction: 'desc' })
 const voucherPage = ref(1)
 const voucherPageSize = 6
+const installmentSort = ref({ key: 'dueDate', direction: 'asc' })
+const installmentPage = ref(1)
+const installmentPageSize = 5
 const apiOnline = ref(false)
 const authToken = ref(localStorage.getItem('propify.authToken') || '')
 const currentUser = ref(null)
@@ -1362,6 +1365,65 @@ const previousVoucherPage = () => {
   voucherPage.value = Math.max(voucherPage.value - 1, 1)
 }
 
+const filteredInstallments = computed(() => {
+  const query = searchQuery.value.trim().toLowerCase()
+
+  return installments.value.filter((installment) => {
+    const searchable = [
+      installment.contractCode,
+      installment.number,
+      installment.dueDate,
+      installment.status,
+      installment.amount,
+      installment.paidAmount,
+    ]
+      .join(' ')
+      .toLowerCase()
+
+    return !query || searchable.includes(query)
+  })
+})
+
+const sortedInstallments = computed(() => {
+  const sorted = [...filteredInstallments.value]
+  const { key, direction } = installmentSort.value
+
+  return sorted.sort((a, b) => {
+    const numericKeys = ['amount', 'paidAmount', 'number']
+    const first = numericKeys.includes(key) ? Number(a[key] || 0) : a[key]
+    const second = numericKeys.includes(key) ? Number(b[key] || 0) : b[key]
+
+    return compareValues(first, second, direction)
+  })
+})
+
+const installmentPageCount = computed(() => Math.max(1, Math.ceil(sortedInstallments.value.length / installmentPageSize)))
+const paginatedInstallments = computed(() => {
+  const start = (installmentPage.value - 1) * installmentPageSize
+  return sortedInstallments.value.slice(start, start + installmentPageSize)
+})
+
+const sortInstallments = (key) => {
+  installmentSort.value = {
+    key,
+    direction: installmentSort.value.key === key && installmentSort.value.direction === 'asc' ? 'desc' : 'asc',
+  }
+  installmentPage.value = 1
+}
+
+const installmentSortLabel = (key) => {
+  if (installmentSort.value.key !== key) return ''
+  return installmentSort.value.direction === 'asc' ? '↑' : '↓'
+}
+
+const nextInstallmentPage = () => {
+  installmentPage.value = Math.min(installmentPage.value + 1, installmentPageCount.value)
+}
+
+const previousInstallmentPage = () => {
+  installmentPage.value = Math.max(installmentPage.value - 1, 1)
+}
+
 const downloadFile = (filename, content, type = 'text/csv;charset=utf-8', withBom = true) => {
   const blob = new Blob([withBom ? '\ufeff' : '', content], { type })
   const url = URL.createObjectURL(blob)
@@ -1506,6 +1568,7 @@ watch([searchQuery, statusFilter], () => {
   clientPage.value = 1
   contractPage.value = 1
   voucherPage.value = 1
+  installmentPage.value = 1
 })
 
 watch(propertyPageCount, (pageCount) => {
@@ -1522,6 +1585,10 @@ watch(contractPageCount, (pageCount) => {
 
 watch(voucherPageCount, (pageCount) => {
   voucherPage.value = Math.min(voucherPage.value, pageCount)
+})
+
+watch(installmentPageCount, (pageCount) => {
+  installmentPage.value = Math.min(installmentPage.value, pageCount)
 })
 
 const statusClass = (status) =>
@@ -2158,10 +2225,13 @@ onMounted(loadCurrentUser)
               <p class="eyebrow">الأقساط</p>
               <h2>أقرب الاستحقاقات</h2>
             </div>
-            <CalendarClock :size="22" />
+            <div class="panel-actions">
+              <button class="ghost-button" type="button" @click="sortInstallments('dueDate')">التاريخ {{ installmentSortLabel('dueDate') }}</button>
+              <button class="ghost-button" type="button" @click="sortInstallments('amount')">المبلغ {{ installmentSortLabel('amount') }}</button>
+            </div>
           </div>
           <div class="stack-list">
-            <div v-for="installment in installments.slice(0, 4)" :key="`${installment.contractCode}-${installment.number}`" class="list-row">
+            <div v-for="installment in paginatedInstallments" :key="`${installment.contractCode}-${installment.number}`" class="list-row">
               <div>
                 <strong>{{ installment.contractCode }}</strong>
                 <span>القسط {{ installment.number }} · {{ installment.dueDate }}</span>
@@ -2179,6 +2249,19 @@ onMounted(loadCurrentUser)
                   ✓
                 </button>
               </div>
+            </div>
+            <p v-if="sortedInstallments.length === 0" class="empty-note">لا توجد أقساط مطابقة للبحث الحالي.</p>
+          </div>
+          <div class="pagination-bar">
+            <span>عرض {{ paginatedInstallments.length }} من {{ sortedInstallments.length }} قسط</span>
+            <div class="row-actions">
+              <button class="mini-button" type="button" :disabled="installmentPage === 1" @click="previousInstallmentPage">
+                <ChevronRight :size="17" />
+              </button>
+              <span>{{ installmentPage }} / {{ installmentPageCount }}</span>
+              <button class="mini-button" type="button" :disabled="installmentPage === installmentPageCount" @click="nextInstallmentPage">
+                <ChevronLeft :size="17" />
+              </button>
             </div>
           </div>
         </article>
