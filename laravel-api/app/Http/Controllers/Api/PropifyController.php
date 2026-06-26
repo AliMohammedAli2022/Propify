@@ -773,9 +773,22 @@ class PropifyController extends Controller
             return $guard;
         }
 
-        return $this->json(
-            LedgerEntry::query()->latest()->get()->map(fn (LedgerEntry $entry) => $this->ledgerResource($entry))
-        );
+        $entries = LedgerEntry::query()->latest()->get();
+
+        if ($request->query('export') === 'csv') {
+            return $this->csvResponse([
+                ['رقم القيد', 'الاتجاه', 'المبلغ', 'الوصف', 'التاريخ'],
+                ...$entries->map(fn (LedgerEntry $entry) => [
+                    $entry->code,
+                    $entry->direction === 'credit' ? 'إيراد' : 'مصروف',
+                    $entry->amount,
+                    $entry->description,
+                    $entry->entry_date->format('Y-m-d'),
+                ])->all(),
+            ], 'propify-ledger.csv');
+        }
+
+        return $this->json($entries->map(fn (LedgerEntry $entry) => $this->ledgerResource($entry)));
     }
 
     public function notifications(Request $request): JsonResponse

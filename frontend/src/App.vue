@@ -1797,6 +1797,24 @@ const downloadReport = async (report, filename) => {
   }
 }
 
+const downloadLedger = async () => {
+  try {
+    const response = await fetch(`${API_BASE_URL}/ledger?export=csv`, {
+      headers: {
+        ...(authToken.value ? { Authorization: `Bearer ${authToken.value}` } : {}),
+      },
+    })
+    if (!response.ok) throw new Error('Ledger export failed')
+
+    const content = await response.text()
+    downloadFile('propify-ledger.csv', content)
+    apiOnline.value = true
+  } catch {
+    apiOnline.value = false
+    showSuccess('تعذر تنزيل دفتر الأستاذ من API.')
+  }
+}
+
 const downloadBackup = async () => {
   try {
     const response = await fetch(`${API_BASE_URL}/backup/export`, {
@@ -2572,6 +2590,7 @@ onMounted(loadCurrentUser)
             <div class="panel-actions">
               <button class="ghost-button" type="button" @click="sortLedger('entryDate')">التاريخ {{ ledgerSortLabel('entryDate') }}</button>
               <button class="ghost-button" type="button" @click="sortLedger('amount')">المبلغ {{ ledgerSortLabel('amount') }}</button>
+              <button class="ghost-button" type="button" title="تنزيل دفتر الأستاذ" @click="downloadLedger"><Download :size="17" /></button>
             </div>
           </div>
           <div class="finance-summary">
