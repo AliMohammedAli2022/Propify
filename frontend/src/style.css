@@ -594,6 +594,27 @@ th {
   font-size: 0.86rem;
 }
 
+.sort-button {
+  width: 100%;
+  min-height: 28px;
+  border: 0;
+  padding: 0;
+  color: inherit;
+  background: transparent;
+  text-align: inherit;
+  font-weight: 800;
+}
+
+.pagination-bar {
+  min-height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding-top: 12px;
+  color: var(--muted);
+}
+
 .empty-cell {
   color: var(--muted);
   text-align: center;
@@ -917,7 +938,8 @@ td .row-actions {
   }
 
   .topbar,
-  .toolbar {
+  .toolbar,
+  .pagination-bar {
     align-items: stretch;
     flex-direction: column;
   }

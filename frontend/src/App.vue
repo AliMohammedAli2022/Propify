@@ -33,6 +33,9 @@ const activeSection = ref('dashboard')
 const welcomeVisible = ref(true)
 const searchQuery = ref('')
 const statusFilter = ref('الكل')
+const propertySort = ref({ key: 'code', direction: 'desc' })
+const propertyPage = ref(1)
+const propertyPageSize = 8
 const apiOnline = ref(false)
 const authToken = ref(localStorage.getItem('propify.authToken') || '')
 const currentUser = ref(null)
@@ -1134,6 +1137,50 @@ const filteredProperties = computed(() => {
   })
 })
 
+const sortedProperties = computed(() => {
+  const sorted = [...filteredProperties.value]
+  const { key, direction } = propertySort.value
+  const multiplier = direction === 'asc' ? 1 : -1
+
+  return sorted.sort((a, b) => {
+    const first = key === 'price' ? Number(String(a[key] || 0).replaceAll(',', '')) : String(a[key] ?? '')
+    const second = key === 'price' ? Number(String(b[key] || 0).replaceAll(',', '')) : String(b[key] ?? '')
+
+    if (typeof first === 'number' && typeof second === 'number') {
+      return (first - second) * multiplier
+    }
+
+    return first.localeCompare(second, 'ar') * multiplier
+  })
+})
+
+const propertyPageCount = computed(() => Math.max(1, Math.ceil(sortedProperties.value.length / propertyPageSize)))
+const paginatedProperties = computed(() => {
+  const start = (propertyPage.value - 1) * propertyPageSize
+  return sortedProperties.value.slice(start, start + propertyPageSize)
+})
+
+const sortProperties = (key) => {
+  propertySort.value = {
+    key,
+    direction: propertySort.value.key === key && propertySort.value.direction === 'asc' ? 'desc' : 'asc',
+  }
+  propertyPage.value = 1
+}
+
+const propertySortLabel = (key) => {
+  if (propertySort.value.key !== key) return ''
+  return propertySort.value.direction === 'asc' ? '↑' : '↓'
+}
+
+const nextPropertyPage = () => {
+  propertyPage.value = Math.min(propertyPage.value + 1, propertyPageCount.value)
+}
+
+const previousPropertyPage = () => {
+  propertyPage.value = Math.max(propertyPage.value - 1, 1)
+}
+
 const downloadFile = (filename, content, type = 'text/csv;charset=utf-8', withBom = true) => {
   const blob = new Blob([withBom ? '\ufeff' : '', content], { type })
   const url = URL.createObjectURL(blob)
@@ -1272,6 +1319,14 @@ watch(
   },
   { deep: true },
 )
+
+watch([searchQuery, statusFilter], () => {
+  propertyPage.value = 1
+})
+
+watch(propertyPageCount, (pageCount) => {
+  propertyPage.value = Math.min(propertyPage.value, pageCount)
+})
 
 const statusClass = (status) =>
   ({
@@ -1637,19 +1692,19 @@ onMounted(loadCurrentUser)
             <table>
               <thead>
                 <tr>
-                  <th>رقم العقار</th>
-                  <th>النوع</th>
-                  <th>الغرض</th>
-                  <th>المنطقة</th>
-                  <th>السعر / دينار</th>
-                  <th>الحالة</th>
+                  <th><button class="sort-button" type="button" @click="sortProperties('code')">رقم العقار {{ propertySortLabel('code') }}</button></th>
+                  <th><button class="sort-button" type="button" @click="sortProperties('type')">النوع {{ propertySortLabel('type') }}</button></th>
+                  <th><button class="sort-button" type="button" @click="sortProperties('mode')">الغرض {{ propertySortLabel('mode') }}</button></th>
+                  <th><button class="sort-button" type="button" @click="sortProperties('area')">المنطقة {{ propertySortLabel('area') }}</button></th>
+                  <th><button class="sort-button" type="button" @click="sortProperties('price')">السعر / دينار {{ propertySortLabel('price') }}</button></th>
+                  <th><button class="sort-button" type="button" @click="sortProperties('status')">الحالة {{ propertySortLabel('status') }}</button></th>
                   <th>الملفات</th>
-                  <th>المالك</th>
+                  <th><button class="sort-button" type="button" @click="sortProperties('owner')">المالك {{ propertySortLabel('owner') }}</button></th>
                   <th>الإجراءات</th>
                 </tr>
               </thead>
               <tbody>
-                <tr v-for="property in filteredProperties" :key="property.code">
+                <tr v-for="property in paginatedProperties" :key="property.code">
                   <td>{{ property.code }}</td>
                   <td>{{ property.type }}</td>
                   <td>{{ property.mode }}</td>
@@ -1671,6 +1726,18 @@ onMounted(loadCurrentUser)
                 </tr>
               </tbody>
             </table>
+          </div>
+          <div class="pagination-bar">
+            <span>عرض {{ paginatedProperties.length }} من {{ filteredProperties.length }} عقار</span>
+            <div class="row-actions">
+              <button class="mini-button" type="button" :disabled="propertyPage === 1" @click="previousPropertyPage">
+                <ChevronRight :size="17" />
+              </button>
+              <small>صفحة {{ propertyPage }} / {{ propertyPageCount }}</small>
+              <button class="mini-button" type="button" :disabled="propertyPage === propertyPageCount" @click="nextPropertyPage">
+                <ChevronLeft :size="17" />
+              </button>
+            </div>
           </div>
         </article>
 
