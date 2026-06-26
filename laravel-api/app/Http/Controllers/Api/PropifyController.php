@@ -8,10 +8,12 @@ use App\Models\Contract;
 use App\Models\Installment;
 use App\Models\LedgerEntry;
 use App\Models\Property;
+use App\Models\User;
 use App\Models\Voucher;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Str;
 
@@ -29,6 +31,57 @@ class PropifyController extends Controller
             'service' => 'propify-laravel-api',
             'database' => config('database.connections.mysql.database'),
         ]);
+    }
+
+    public function login(Request $request): JsonResponse
+    {
+        $validator = Validator::make($request->all(), [
+            'email' => ['required', 'email'],
+            'password' => ['required', 'string'],
+        ], $this->messages());
+
+        if ($validator->fails()) {
+            return $this->json(['message' => 'Validation failed', 'errors' => $validator->errors()], 422);
+        }
+
+        $user = User::where('email', $request->string('email'))->first();
+
+        if (! $user || ! Hash::check($request->string('password'), $user->password)) {
+            return $this->json([
+                'message' => 'بيانات الدخول غير صحيحة.',
+                'errors' => ['email' => ['بيانات الدخول غير صحيحة.']],
+            ], 422);
+        }
+
+        $token = Str::random(64);
+        $user->forceFill(['api_token' => hash('sha256', $token)])->save();
+
+        return $this->json([
+            'token' => $token,
+            'user' => $this->userResource($user),
+        ]);
+    }
+
+    public function me(Request $request): JsonResponse
+    {
+        $user = $this->userFromRequest($request);
+
+        if (! $user) {
+            return $this->json(['message' => 'Unauthenticated'], 401);
+        }
+
+        return $this->json(['user' => $this->userResource($user)]);
+    }
+
+    public function logout(Request $request): JsonResponse
+    {
+        $user = $this->userFromRequest($request);
+
+        if ($user) {
+            $user->forceFill(['api_token' => null])->save();
+        }
+
+        return $this->json(['ok' => true]);
     }
 
     public function dashboard(): JsonResponse
@@ -305,6 +358,30 @@ class PropifyController extends Controller
             'regex' => 'صيغة الحقل غير صحيحة.',
             'in' => 'القيمة المختارة غير صحيحة.',
             'lte' => 'المدفوع لا يمكن أن يتجاوز قيمة العقد.',
+            'email' => 'يرجى إدخال بريد إلكتروني صحيح.',
+        ];
+    }
+
+    private function userFromRequest(Request $request): ?User
+    {
+        $header = $request->header('Authorization', '');
+        $token = Str::startsWith($header, 'Bearer ') ? Str::after($header, 'Bearer ') : null;
+
+        if (! $token) {
+            return null;
+        }
+
+        return User::where('api_token', hash('sha256', $token))->first();
+    }
+
+    private function userResource(User $user): array
+    {
+        return [
+            'id' => $user->id,
+            'name' => $user->name,
+            'email' => $user->email,
+            'role' => $user->role,
+            'permissions' => $user->permissions ?? [],
         ];
     }
 

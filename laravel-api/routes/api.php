@@ -5,6 +5,9 @@ use Illuminate\Support\Facades\Route;
 
 Route::options('/{any}', [PropifyController::class, 'options'])->where('any', '.*');
 
+Route::post('/auth/login', [PropifyController::class, 'login']);
+Route::get('/auth/me', [PropifyController::class, 'me']);
+Route::post('/auth/logout', [PropifyController::class, 'logout']);
 Route::get('/health', [PropifyController::class, 'health']);
 Route::get('/dashboard', [PropifyController::class, 'dashboard']);
 Route::get('/properties', [PropifyController::class, 'properties']);

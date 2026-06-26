@@ -46,6 +46,42 @@ button {
   min-height: 100vh;
 }
 
+.login-shell {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background:
+    linear-gradient(135deg, rgba(20, 125, 115, 0.12), transparent 35%),
+    var(--bg);
+}
+
+.login-panel {
+  width: min(460px, 100%);
+  padding: 22px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+
+.login-brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 18px;
+}
+
+.login-form {
+  grid-template-columns: 1fr;
+}
+
+.login-hint {
+  margin: 14px 0 0;
+  color: var(--muted);
+  font-size: 0.88rem;
+}
+
 .app-shell {
   min-height: 100vh;
   display: grid;
@@ -492,6 +528,12 @@ h2 {
   border-radius: var(--radius);
   color: #fff;
   background: var(--primary);
+}
+
+.ghost-button {
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--line);
 }
 
 .table-wrap {

@@ -17,6 +17,9 @@ return new class extends Migration
             $table->string('email')->unique();
             $table->timestamp('email_verified_at')->nullable();
             $table->string('password');
+            $table->string('role')->default('system_admin');
+            $table->json('permissions')->nullable();
+            $table->string('api_token', 80)->nullable()->unique();
             $table->rememberToken();
             $table->timestamps();
         });

@@ -10,6 +10,7 @@ use App\Models\Property;
 use App\Models\Voucher;
 use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
+use Illuminate\Support\Facades\Hash;
 
 class DatabaseSeeder extends Seeder
 {
@@ -20,6 +21,25 @@ class DatabaseSeeder extends Seeder
      */
     public function run(): void
     {
+        \App\Models\User::factory()->create([
+            'name' => 'علي محمد',
+            'email' => 'admin@propify.local',
+            'password' => Hash::make('password'),
+            'role' => 'system_admin',
+            'permissions' => [
+                'properties.create',
+                'properties.update',
+                'properties.approve',
+                'clients.manage',
+                'contracts.create',
+                'contracts.print',
+                'vouchers.manage',
+                'reports.view',
+                'settings.update',
+                'users.manage',
+            ],
+        ]);
+
         Client::query()->insert([
             ['name' => 'أحمد علي', 'role' => 'مشتري', 'phone' => '07701234567', 'national_id' => 'A12345678901', 'stage' => 'تفاوض', 'source' => 'إعلان ممول', 'created_at' => now(), 'updated_at' => now()],
             ['name' => 'محمد حسن', 'role' => 'مؤجر', 'phone' => '07801234567', 'national_id' => 'B12345678901', 'stage' => 'عقد نشط', 'source' => 'توصية', 'created_at' => now(), 'updated_at' => now()],

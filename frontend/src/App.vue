@@ -34,6 +34,13 @@ const welcomeVisible = ref(true)
 const searchQuery = ref('')
 const statusFilter = ref('الكل')
 const apiOnline = ref(false)
+const authToken = ref(localStorage.getItem('propify.authToken') || '')
+const currentUser = ref(null)
+const authErrors = ref({})
+const loginForm = ref({
+  email: 'admin@propify.local',
+  password: 'password',
+})
 
 setTimeout(() => {
   welcomeVisible.value = false
@@ -148,7 +155,11 @@ const showSuccess = (message) => {
 
 const apiRequest = async (path, options = {}) => {
   const response = await fetch(`${API_BASE_URL}${path}`, {
-    headers: { 'Content-Type': 'application/json', ...(options.headers || {}) },
+    headers: {
+      'Content-Type': 'application/json',
+      ...(authToken.value ? { Authorization: `Bearer ${authToken.value}` } : {}),
+      ...(options.headers || {}),
+    },
     ...options,
   })
   const data = await response.json()
@@ -158,6 +169,50 @@ const apiRequest = async (path, options = {}) => {
     throw error
   }
   return data
+}
+
+const login = async () => {
+  authErrors.value = {}
+
+  try {
+    const data = await apiRequest('/auth/login', {
+      method: 'POST',
+      body: JSON.stringify(loginForm.value),
+    })
+    authToken.value = data.token
+    currentUser.value = data.user
+    localStorage.setItem('propify.authToken', data.token)
+    apiOnline.value = true
+    await loadApiData()
+  } catch (error) {
+    apiOnline.value = false
+    authErrors.value = error.errors || { email: ['تعذر تسجيل الدخول.'] }
+  }
+}
+
+const loadCurrentUser = async () => {
+  if (!authToken.value) return
+
+  try {
+    const data = await apiRequest('/auth/me')
+    currentUser.value = data.user
+    apiOnline.value = true
+    await loadApiData()
+  } catch {
+    authToken.value = ''
+    currentUser.value = null
+    localStorage.removeItem('propify.authToken')
+  }
+}
+
+const logout = async () => {
+  try {
+    await apiRequest('/auth/logout', { method: 'POST' })
+  } finally {
+    authToken.value = ''
+    currentUser.value = null
+    localStorage.removeItem('propify.authToken')
+  }
 }
 
 const loadApiData = async () => {
@@ -590,17 +645,43 @@ const shellClasses = computed(() => ({
   'is-collapsed': collapsed.value,
 }))
 
-onMounted(loadApiData)
+onMounted(loadCurrentUser)
 </script>
 
 <template>
-  <div class="app-shell" :class="shellClasses" dir="rtl">
+  <div v-if="!currentUser" class="login-shell" dir="rtl">
+    <section class="login-panel">
+      <div class="login-brand">
+        <div class="avatar" aria-hidden="true">P</div>
+        <div>
+          <p class="eyebrow">Propify</p>
+          <h1>تسجيل الدخول</h1>
+        </div>
+      </div>
+      <form class="smart-form login-form" @submit.prevent="login">
+        <label>
+          <span>البريد الإلكتروني</span>
+          <input v-model="loginForm.email" type="email" autocomplete="username" />
+          <small v-if="authErrors.email" class="field-error"><AlertCircle :size="14" />{{ authErrors.email[0] }}</small>
+        </label>
+        <label>
+          <span>كلمة المرور</span>
+          <input v-model="loginForm.password" type="password" autocomplete="current-password" />
+          <small v-if="authErrors.password" class="field-error"><AlertCircle :size="14" />{{ authErrors.password[0] }}</small>
+        </label>
+        <button class="submit-button" type="submit">دخول النظام</button>
+      </form>
+      <p class="login-hint">الحساب الافتراضي: admin@propify.local / password</p>
+    </section>
+  </div>
+
+  <div v-else class="app-shell" :class="shellClasses" dir="rtl">
     <aside class="sidebar">
       <div class="profile">
         <div class="avatar" aria-hidden="true">ع</div>
         <div class="profile-text">
-          <strong>علي محمد</strong>
-          <span>مدير النظام</span>
+          <strong>{{ currentUser?.name }}</strong>
+          <span>{{ currentUser?.role }}</span>
         </div>
       </div>
 
@@ -643,6 +724,7 @@ onMounted(loadApiData)
           <span class="api-status" :class="{ online: apiOnline }">
             {{ apiOnline ? 'API متصل' : 'حفظ محلي' }}
           </span>
+          <button class="text-button ghost-button" type="button" @click="logout">خروج</button>
           <button class="icon-button" type="button" :title="darkMode ? 'الثيم الفاتح' : 'الثيم الداكن'" @click="darkMode = !darkMode">
             <Sun v-if="darkMode" :size="20" />
             <Moon v-else :size="20" />

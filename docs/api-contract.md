@@ -12,10 +12,20 @@ Request:
 
 ```json
 {
-  "email": "admin@propify.com",
-  "password": "secret"
+  "email": "admin@propify.local",
+  "password": "password"
 }
 ```
+
+`GET /api/auth/me`
+
+Requires:
+
+```text
+Authorization: Bearer {token}
+```
+
+`POST /api/auth/logout`
 
 Response:
 
