@@ -48,6 +48,9 @@ const voucherPageSize = 6
 const installmentSort = ref({ key: 'dueDate', direction: 'asc' })
 const installmentPage = ref(1)
 const installmentPageSize = 5
+const activitySort = ref({ key: 'createdAt', direction: 'desc' })
+const activityPage = ref(1)
+const activityPageSize = 6
 const apiOnline = ref(false)
 const authToken = ref(localStorage.getItem('propify.authToken') || '')
 const currentUser = ref(null)
@@ -1424,6 +1427,57 @@ const previousInstallmentPage = () => {
   installmentPage.value = Math.max(installmentPage.value - 1, 1)
 }
 
+const filteredActivityLogs = computed(() => {
+  const query = searchQuery.value.trim().toLowerCase()
+
+  return activityLogs.value.filter((activity) => {
+    const searchable = [
+      activity.summary,
+      activity.userName,
+      activity.action,
+      activity.createdAt,
+    ]
+      .join(' ')
+      .toLowerCase()
+
+    return !query || searchable.includes(query)
+  })
+})
+
+const sortedActivityLogs = computed(() => {
+  const sorted = [...filteredActivityLogs.value]
+  const { key, direction } = activitySort.value
+
+  return sorted.sort((a, b) => compareValues(a[key], b[key], direction))
+})
+
+const activityPageCount = computed(() => Math.max(1, Math.ceil(sortedActivityLogs.value.length / activityPageSize)))
+const paginatedActivityLogs = computed(() => {
+  const start = (activityPage.value - 1) * activityPageSize
+  return sortedActivityLogs.value.slice(start, start + activityPageSize)
+})
+
+const sortActivityLogs = (key) => {
+  activitySort.value = {
+    key,
+    direction: activitySort.value.key === key && activitySort.value.direction === 'asc' ? 'desc' : 'asc',
+  }
+  activityPage.value = 1
+}
+
+const activitySortLabel = (key) => {
+  if (activitySort.value.key !== key) return ''
+  return activitySort.value.direction === 'asc' ? '↑' : '↓'
+}
+
+const nextActivityPage = () => {
+  activityPage.value = Math.min(activityPage.value + 1, activityPageCount.value)
+}
+
+const previousActivityPage = () => {
+  activityPage.value = Math.max(activityPage.value - 1, 1)
+}
+
 const downloadFile = (filename, content, type = 'text/csv;charset=utf-8', withBom = true) => {
   const blob = new Blob([withBom ? '\ufeff' : '', content], { type })
   const url = URL.createObjectURL(blob)
@@ -1569,6 +1623,7 @@ watch([searchQuery, statusFilter], () => {
   contractPage.value = 1
   voucherPage.value = 1
   installmentPage.value = 1
+  activityPage.value = 1
 })
 
 watch(propertyPageCount, (pageCount) => {
@@ -1589,6 +1644,10 @@ watch(voucherPageCount, (pageCount) => {
 
 watch(installmentPageCount, (pageCount) => {
   installmentPage.value = Math.min(installmentPage.value, pageCount)
+})
+
+watch(activityPageCount, (pageCount) => {
+  activityPage.value = Math.min(activityPage.value, pageCount)
 })
 
 const statusClass = (status) =>
@@ -2069,17 +2128,32 @@ onMounted(loadCurrentUser)
               <p class="eyebrow">النشاطات</p>
               <h2>آخر عمليات النظام</h2>
             </div>
-            <ClipboardCheck :size="22" />
+            <div class="panel-actions">
+              <button class="ghost-button" type="button" @click="sortActivityLogs('createdAt')">التاريخ {{ activitySortLabel('createdAt') }}</button>
+              <button class="ghost-button" type="button" @click="sortActivityLogs('action')">النوع {{ activitySortLabel('action') }}</button>
+            </div>
           </div>
           <div class="stack-list activity-list">
-            <div v-for="activity in activityLogs.slice(0, 6)" :key="activity.id" class="list-row">
+            <div v-for="activity in paginatedActivityLogs" :key="activity.id" class="list-row">
               <div>
                 <strong>{{ activity.summary }}</strong>
                 <span>{{ activity.userName }} · {{ activity.createdAt }}</span>
               </div>
               <small>{{ activity.action }}</small>
             </div>
-            <p v-if="activityLogs.length === 0" class="empty-note">لا توجد نشاطات مسجلة بعد.</p>
+            <p v-if="sortedActivityLogs.length === 0" class="empty-note">لا توجد نشاطات مطابقة للبحث الحالي.</p>
+          </div>
+          <div class="pagination-bar">
+            <span>عرض {{ paginatedActivityLogs.length }} من {{ sortedActivityLogs.length }} نشاط</span>
+            <div class="row-actions">
+              <button class="mini-button" type="button" :disabled="activityPage === 1" @click="previousActivityPage">
+                <ChevronRight :size="17" />
+              </button>
+              <span>{{ activityPage }} / {{ activityPageCount }}</span>
+              <button class="mini-button" type="button" :disabled="activityPage === activityPageCount" @click="nextActivityPage">
+                <ChevronLeft :size="17" />
+              </button>
+            </div>
           </div>
         </article>
 
